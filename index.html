@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مستشار الطاقة الذكي</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--tx:#e2e8f0;--mut:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--acc:#38bdf8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:Tahoma,Arial,sans-serif;padding:14px;max-width:980px;margin-inline:auto}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:0 0 10px;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.big{font-size:34px;font-weight:700}.mut{color:var(--mut);font-size:13px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--bad);display:inline-block}
+.dot.on{background:var(--ok)}
+.bar{height:14px;background:#0b1220;border-radius:8px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--ok);transition:width .5s}
+input,button{font:inherit;background:#0b1220;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+input[type=number]{width:90px}
+button{cursor:pointer;background:var(--acc);color:#04202e;border:0;font-weight:700}
+button.sec{background:#0b1220;color:var(--tx);border:1px solid var(--line)}
+.dev{border-inline-start:4px solid var(--line)}
+.dev.run{border-inline-start-color:var(--ok)}
+.dev.warn{border-inline-start-color:var(--warn)}
+.badge{padding:2px 8px;border-radius:10px;font-size:12px;background:#0b1220}
+.badge.on{background:#14532d;color:#bbf7d0}
+.advice{margin-top:8px;padding:8px 10px;border-radius:8px;background:#0b1220;font-size:14px;line-height:1.6}
+.advice.warn{background:#451a03;color:#fde68a}.advice.bad{background:#450a0a;color:#fecaca}
+.switch{display:flex;align-items:center;gap:6px}
+canvas{width:100%;height:120px;background:#0b1220;border-radius:8px}
+#top .advice{margin:6px 0 0}
+</style>
+</head>
+<body>
+<div class="row" style="justify-content:space-between">
+  <div><h1>⚡ مستشار الطاقة الذكي</h1>
+  <span class="mut"><span id="dot" class="dot"></span> <span id="conn">غير متصل</span> · الجهاز: <span id="devstat">--</span></span></div>
+  <div class="row">
+    <button class="sec" onclick="document.getElementById('settings').hidden^=1">⚙️ الإعدادات</button>
+    <button class="sec" onclick="askNotif()">🔔 الإشعارات</button>
+  </div>
+</div>
+
+<div id="settings" class="card" hidden style="margin-top:10px">
+  <h2>الإعدادات العامة</h2>
+  <div class="row">
+    <label>كود الموقع (نفس SITE_ID) <input id="site" style="width:220px"></label>
+    <label>حد الشريحة kWh <input id="cap" type="number"></label>
+    <label>بداية الدورة <input id="cycle" type="date"></label>
+    <label>أيام الدورة <input id="days" type="number" min="28" max="35"></label>
+    <label>حدود الشرايح kWh (بفاصلة) <input id="tiers" style="width:230px"></label>
+    <button onclick="saveSettings()">حفظ وإعادة الاتصال</button>
+    <button class="sec" onclick="resetCounter()">ضبط استهلاك الدورة الحالي</button>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px">
+  <div class="grid">
+    <div><div class="mut">الاستهلاك اللحظي</div><div class="big"><span id="pw">0</span> <small>W</small></div>
+      <div class="mut">معامل القدرة: <span id="pf">--</span> · <span id="vi">--</span></div></div>
+    <div><div class="mut">استهلاك الشريحة</div><div class="big"><span id="kwh">0</span> <small>/ <span id="capv">350</span> kWh</small></div>
+      <div class="bar" style="margin-top:8px"><i id="capbar" style="width:0"></i></div>
+      <div class="mut" style="margin-top:6px">المتبقي للحد: <b id="rem">--</b> kWh · المتاح يوميًا لباقي الدورة: <b id="perday">--</b> kWh</div></div>
+  </div>
+  <div class="grid" style="margin-top:12px">
+    <div><div class="mut">📅 الدورة</div><div>فات <b id="elapsed">--</b> يوم · باقي <b id="left">--</b> يوم</div></div>
+    <div><div class="mut">متوسط الاستهلاك اليومي</div><div><b id="rate">--</b> kWh/يوم</div></div>
+    <div><div class="mut">🔮 المتوقع آخر الدورة</div><div class="big" style="font-size:26px"><span id="proj">--</span> <small>kWh</small></div></div>
+    <div><div class="mut">هتوصل لحد الشريحة</div><div><b id="capdate">--</b></div><div class="mut" id="acc"></div></div>
+  </div>
+  <canvas id="chart" width="900" height="120" style="margin-top:12px"></canvas>
+</div>
+
+<div class="card"><h2>🌡️ الجو والحرارة (بيحدّدوا شغل التكييف والسخان والغسالة)</h2>
+  <div class="row">
+    <label>حرارة الجو بره °م <input id="tout" type="number" step="0.5" style="width:80px"></label>
+    <label>حرارة مية الدخول °م <input id="tin" type="number" step="0.5" style="width:80px"></label>
+    <label>حرارة الغرفة لحظة تشغيل التكييف °م <input id="troom0" type="number" step="0.5" style="width:80px"></label>
+    <button class="sec" onclick="fetchOutdoor()">📍 هات حرارة الجو من النت</button>
+    <span class="mut" id="envinfo"></span>
+  </div>
+  <div class="mut" style="margin-top:6px">التكييف: الغرفة بتسخن من برا وبتبرد بالتكييف، والثرموستات بيشغّل ويفصل الكومبروسور (±0.5°) — يعني <b>الكومبروسور مش بيفضل شغال ثابت</b>: ≈100% في أول التشغيل (pull-down) وبعدين بيقل لحد نسبة الاستقرار d = UA·(الجو − المظبوطة) ÷ (COP·قدرة التكييف). السخان والغسالة: وقت التسخين = لتر × 4.186 × (المظبوطة − حرارة المية) ÷ القدرة. الحرارة المظبوطة ومساحة الغرفة بيتضبطوا في كارت كل جهاز.</div>
+</div>
+
+<div class="card"><h2>🔎 تحليل الحمل الحالي (من الأرقام فقط)</h2><div id="loadinfo" class="mut">في انتظار البيانات…</div></div>
+
+<div class="card" id="alwaysCard"><h2>🏠 أجهزة شغالة 24 ساعة (الحمل الأساسي)</h2>
+  <div class="mut" style="margin-bottom:8px">ضيف اللي بيفضل شغال طول اليوم. الجهاز اللي بيشتغل ويفصل (تلاجة/فريزر: كومبروسر) اختار له "بيشتغل ويفصل"، والثابت (راوتر، إضاءة، ستاند باي) اختار "ثابت". من هنا بنعرف الحمل الأساسي ونفصله عن باقي الأجهزة.</div>
+  <div id="alwaysList"></div>
+  <div class="row" style="margin-top:8px">
+    <button class="sec" onclick="addAlways('fridge')">+ تلاجة</button>
+    <button class="sec" onclick="addAlways('freezer')">+ فريزر</button>
+    <button class="sec" onclick="addAlways('router')">+ راوتر</button>
+    <button class="sec" onclick="addAlways('lights')">+ إضاءة</button>
+    <button class="sec" onclick="addAlways('custom')">+ جهاز تاني</button>
+    <button class="sec" onclick="resetTrim()">تصفير التصحيح المتعلَّم</button>
+  </div>
+  <div class="mut" id="alwaysInfo" style="margin-top:8px"></div>
+</div>
+
+<div class="card"><h2>📊 توزيع الاستهلاك المقاس (من آخر ضبط)</h2><div id="breakdown" class="mut">في انتظار البيانات…</div></div>
+
+<div class="card" id="top"><h2>💡 نصائح دلوقتي</h2><div id="topAdvice" class="mut">في انتظار البيانات…</div></div>
+
+<div class="card" id="testPanel" hidden style="border:1px dashed var(--warn)"><h2>🧪 وضع الاختبار (بيانات تجريبية من غير جهاز)</h2>
+  <div class="mut" style="margin-bottom:8px">بيحقن حالات جاهزة ويتأكد إن النصائح والأرقام صح. الإعدادات بترجع زي ما كانت بعد كل حالة.</div>
+  <div class="row"><button onclick="runAllScenarios()">▶ شغّل كل الاختبارات</button>
+    <button class="sec" onclick="sendFault(1.6)">⚠️ عطل مُحاكى في الجهاز (1.6×)</button>
+    <button class="sec" onclick="sendFault(1)">إلغاء العطل</button></div>
+  <div id="testOut" style="margin-top:10px"></div></div>
+
+<div class="grid" id="devs"></div>
+
+<script id="logic">
+// <logic>
+// ---------- نموذج الحرارة (نفس معادلات الفيرموير بالظبط) ----------
+const TH = {CP:4.186, T_AMB:25, HEATER_OFF:600};
+// نموذج الغرفة الحراري (RC) للتكييف — نفس ثوابت الفيرموير:  C·dT/dt = UA·(T_out − T_room) − COP·P_rated·State
+const RC = {COP:3.0, C:300000, UA_M2:11, HYST:0.5, MIN_ON:120, MIN_OFF:180};
+const TIERS_DEFAULT = [50,100,200,350,650,1000];            // حدود شرائح الكهرباء المنزلي (kWh/شهر)
+const JUDGE = {AC_MIN_SEC:1200, TOL_DUTY:.10, MARGIN_X:1.25, MARGIN_S:180};
+const clampN=(x,a,b)=>Math.min(b,Math.max(a,x));
+// نسبة تشغيل الكومبروسور في الاستقرار: الحرارة الداخلة من برا = التبريد  →  d = UA·(T_out − T_set) ÷ (COP·P_rated)
+function acSteadyDuty(tOut,tSet,area,pW){ return pW>1 ? clampN(RC.UA_M2*area*(tOut-tSet)/(RC.COP*pW),0,1) : 1; }
+// خطوة واحدة (Euler) + ثرموستات بـ hysteresis وحماية أقل زمن تشغيل/فصل. gain>1 = باب/شباك مفتوح
+function roomStep(s,dt,tOut,tSet,area,pW,gain){
+  const q = RC.UA_M2*area*gain*(tOut-s.T) - (s.on ? RC.COP*pW : 0);
+  s.T += q/RC.C*dt; s.tSw += dt;
+  if(!s.on && s.T>tSet+RC.HYST && s.tSw>=RC.MIN_OFF){ s.on=true; s.tSw=0; }
+  else if(s.on && s.T<tSet-RC.HYST && s.tSw>=RC.MIN_ON){ s.on=false; s.tSw=0; }
+}
+// المنحنى المتوقع لتشغيل الكومبروسور من أول الجلسة (بيتحسب مرة ويتخزّن): onAt(ث) = زمن التشغيل التراكمي
+const _prof=new Map();
+function acProfile(p){      // p = {out,set,area,w,room0}
+  const key=[p.out,p.set,p.area,p.w,p.room0].join('|'); if(_prof.has(key)) return _prof.get(key);
+  const H=6*3600, STEP=10, n=H/STEP, cum=new Float64Array(n+1), s={T:p.room0,on:p.room0>p.set+RC.HYST,tSw:1e9};
+  // الجلسة بتبدأ لما الكومبروسور يشتغل أول مرة (لو الغرفة باردة أصلاً هيستنى لحد ما تسخن): نبدأ العدّ من اللحظة دي
+  for(let t=0;t<86400 && !s.on;t++) roomStep(s,1,p.out,p.set,p.area,p.w,1);
+  let on=0; for(let t=0;t<H;t++){ roomStep(s,1,p.out,p.set,p.area,p.w,1); if(s.on) on++; if((t+1)%STEP===0) cum[(t+1)/STEP]=on; }
+  const tail=(cum[n]-cum[n-360])/3600;                       // نسبة التشغيل في آخر ساعة من المحاكاة (للتمديد)
+  const onAt=sec=>{ if(sec<=0) return 0; if(sec>=H) return cum[n]+(sec-H)*tail; const x=sec/STEP, i=Math.floor(x); return cum[i]+(cum[i+1]-cum[i])*(x-i); };
+  const prof={onAt, dutyAt:sec=>sec>0?onAt(sec)/sec:1, tail, horizon:H, steady:acSteadyDuty(p.out,p.set,p.area,p.w)};
+  if(_prof.size>40) _prof.clear(); _prof.set(key,prof); return prof;
+}
+// كام ساعة تشغيل متواصل تكفي kWh معيّنة (بياخد في الاعتبار إن أول التشغيل أعلى من الاستقرار)
+function acHoursForEnergy(prof,pW,kWh){
+  if(!isFinite(kWh)) return Infinity; const need=kWh*3.6e6/pW; if(need<=0) return 0;
+  const H=prof.horizon, atH=prof.onAt(H);
+  if(need>atH) return prof.tail>0 ? (H+(need-atH)/prof.tail)/3600 : Infinity;
+  let lo=0, hi=H; for(let k=0;k<40;k++){ const mid=(lo+hi)/2; if(prof.onAt(mid)<need) lo=mid; else hi=mid; } return hi/3600;
+}
+function heatSeconds(liters,tSet,tIn,pW){ const dT=Math.max(0,tSet-tIn); return pW>1 ? liters*TH.CP*dT/(pW/1000) : 0; }
+function standbyOnSeconds(tSet){ return clampN(180*(tSet-TH.T_AMB)/30, 20, 400); }
+function standbyDuty(tSet){ const on=standbyOnSeconds(tSet); return on/(on+TH.HEATER_OFF); }
+function washHeatSeconds(kg,tWash,tIn,pW){ return clampN(heatSeconds(2*kg,tWash,tIn,pW),60,2400); }
+
+// المتوقع لجهاز من فرق الحرارة. p = {out, inlet, set, val, w}
+function expectedFor(kind,p){
+  if(kind==='ac'){ const prof=acProfile(p); return {duty:prof.steady, steady:prof.steady, profile:prof}; }
+  if(kind==='heater') return {heatSec:heatSeconds(p.val,p.set,p.inlet,p.w), standby:standbyDuty(p.set), standbyOn:standbyOnSeconds(p.set)};
+  if(kind==='washer') return {heatSec:washHeatSeconds(p.val,p.set,p.inlet,p.w)};
+  return {};
+}
+
+// الحكم: هل الجهاز شغال بالمعدل الطبيعي لفرق الحرارة ده؟  (x = سجل الجهاز من الجهاز، E = المتوقع)
+// الحالات: idle (مش شغال) | measuring (لسه بنقيس) | normal (طبيعي → من غير نصيحة) | high (أعلى من الطبيعي → نصيحة)
+function judgeThermal(kind,x,E){
+  if(!(x.on||x.ses)) return {state:'idle'};
+  if(kind==='ac'){
+    const exp = E.profile.dutyAt(x.sec||0);              // المتوقع الديناميكي: ~100% في الأول وبيقل لحد الاستقرار
+    if((x.sec||0) < JUDGE.AC_MIN_SEC) return {state:'measuring', expected:exp};
+    const obs = (x.rm||0)/x.sec;
+    return {state: obs>exp+JUDGE.TOL_DUTY ? 'high':'normal', observed:obs, expected:exp};
+  }
+  if(kind==='heater' || kind==='washer'){
+    if(!x.on) return {state:'normal'};                       // الثرموستات فاصل = طبيعي
+    if(kind==='washer' && x.mode!==1) return {state:'normal'};
+    const heat = x.et!=null ? x.et : E.heatSec;
+    const base = kind==='heater' ? Math.max(heat, E.standbyOn||0) : heat;
+    const limit = base*JUDGE.MARGIN_X + JUDGE.MARGIN_S;
+    const ms = x.ms||0;
+    return {state: ms>limit ? 'high':'normal', observedSec:ms, expectedSec:heat, limitSec:limit};
+  }
+  return {state:'normal'};
+}
+
+// ---------- الشرايح ----------
+function tierOf(used,tiers){
+  let i=0; while(i<tiers.length && used>=tiers[i]) i++;
+  const start=i?tiers[i-1]:0, end=i<tiers.length?tiers[i]:Infinity;
+  const nextEnd = i+1<tiers.length ? tiers[i+1] : Infinity;      // Infinity = الشريحة الأخيرة (مفتوحة)
+  return {n:i+1, start, end, nextEnd, last:i>=tiers.length};
+}
+function endurance(used,tiers,avgKW){
+  if(!(avgKW>0)) return null;
+  const t=tierOf(used,tiers);
+  const left = t.end===Infinity ? Infinity : t.end-used;
+  const span = t.end===Infinity ? null : (t.nextEnd===Infinity ? Infinity : t.nextEnd-t.end);
+  return {tier:t, leftKWh:left, hoursLeft:left/avgKW, nextSpanKWh:span, hoursNext:span==null?null:span/avgKW};
+}
+// ساعات/يوم تقدر تشغّله وتفضل في الشريحة لحد آخر الدورة (بعد خصم استهلاك باقي البيت)
+function dailyHours(headroomKWh,daysLeft,otherRate,avgKW){
+  if(!(avgKW>0)||!isFinite(headroomKWh)) return Infinity;
+  return Math.max(0, headroomKWh/Math.max(daysLeft,1e-9) - otherRate)/avgKW;
+}
+function fmtHours(h){
+  if(!isFinite(h)) return 'بدون حد';
+  if(h<1) return Math.round(h*60)+' دقيقة';
+  if(h<48) return h.toFixed(1)+' ساعة';
+  return (h/24).toFixed(1)+' يوم';
+}
+// </logic>
+</script>
+<script id="selftest">
+// اختبارات الوحدات (بتشتغل في المتصفح من وضع الاختبار ?test ، وفي Node من tests/dashboard_test.js)
+function runLogicTests(){
+  const R=[]; const T=(name,ok,detail)=>R.push({name,ok:!!ok,detail:detail||''});
+  const near=(a,b,e=1e-6)=>Math.abs(a-b)<=e;
+  T('سخان: 50 لتر من 20 لـ 55 على 1500W ≈ 4883 ث (81 د)', near(heatSeconds(50,55,20,1500),4883.3,1), heatSeconds(50,55,20,1500).toFixed(1));
+  T('سخان: مية دخول أدفى → تسخين أقصر', heatSeconds(50,55,28,1500)<heatSeconds(50,55,15,1500));
+  T('سخان: حرارة مظبوطة أعلى → تسخين أطول', heatSeconds(50,60,20,1500)>heatSeconds(50,50,20,1500));
+  T('سخان: مفيش فرق → صفر', heatSeconds(50,20,20,1500)===0);
+  T('سخان واقف: ثرموستات أعلى → وقت وصل أطول', standbyOnSeconds(60)>standbyOnSeconds(50));
+  T('غسالة: 7 كجم من 20 لـ 40 ≈ 666 ث', near(washHeatSeconds(7,40,20,1760),665.9,1), washHeatSeconds(7,40,20,1760).toFixed(1));
+  T('غسالة: غسيل بارد → الحد الأدنى 60 ث', washHeatSeconds(7,20,20,1760)===60);
+  const t=TIERS_DEFAULT;
+  T('شريحة: 0 → الأولى', tierOf(0,t).n===1 && tierOf(0,t).end===50);
+  T('شريحة: 50 بالظبط → الثانية', tierOf(50,t).n===2);
+  T('شريحة: 180 → الثالثة (101–200)', tierOf(180,t).n===3 && tierOf(180,t).start===100 && tierOf(180,t).end===200);
+  T('شريحة: 1000 → السابعة (مفتوحة)', tierOf(1000,t).n===7 && tierOf(1000,t).last);
+  const e=endurance(180,t,1.0);
+  T('تحمل: 180 kWh و 1 kW → 20 ساعة في الحالية و150 في الجاية', near(e.hoursLeft,20)&&near(e.nextSpanKWh,150)&&near(e.hoursNext,150));
+  T('تحمل: الشريحة السادسة → الجاية مفتوحة', endurance(700,t,1).nextSpanKWh===Infinity);
+  T('تحمل: السابعة → مفيش حد', endurance(1200,t,1).leftKWh===Infinity && endurance(1200,t,1).nextSpanKWh===null);
+  T('ساعات/يوم: ميزانية 1 kWh/يوم بعد خصم 0.5 و AC 1kW → 0.5 ساعة', near(dailyHours(10,10,0.5,1),0.5));
+  T('ساعات/يوم: لو باقي البيت لوحده عدّى الميزانية → صفر', dailyHours(10,10,2,1)===0);
+  // الحكم
+  const P={out:38,inlet:20,set:24,val:50,w:1500};
+  // ---- تكييف: نموذج RC + ثرموستات ----
+  const AP={out:38,set:24,area:20,w:1325,room0:30}, prof=acProfile(AP);
+  T('تكييف: نسبة الاستقرار (جو 38، مظبوط 24، غرفة 20م²، 1325W) = 77.5%', near(acSteadyDuty(38,24,20,1325),220*14/(3*1325),1e-9), acSteadyDuty(38,24,20,1325).toFixed(4));
+  T('تكييف: التكييف الأكبر (HP أعلى) لنفس الغرفة → نسبة تشغيل أقل', acSteadyDuty(38,24,20,1700)<acSteadyDuty(38,24,20,1325));
+  T('تكييف: متوسط السحب P×d ما بيتغيرش مع حجم التكييف', near(1700*acSteadyDuty(38,24,20,1700),1325*acSteadyDuty(38,24,20,1325),1e-6));
+  T('تكييف: الجو = المظبوط → صفر', acSteadyDuty(24,24,20,1325)===0);
+  T('تكييف: كل ما الجو يسخن النسبة تزيد', acSteadyDuty(30,24,20,1325)<acSteadyDuty(35,24,20,1325) && acSteadyDuty(35,24,20,1325)<acSteadyDuty(40,24,20,1325));
+  T('تكييف (RC): أول 20 دقيقة الكومبروسور ≈100% (pull-down)', prof.dutyAt(1200)>0.95, prof.dutyAt(1200).toFixed(3));
+  T('تكييف (RC): بعدين بيفصل ويشتغل → النسبة بتقل', prof.dutyAt(6*3600)<prof.dutyAt(1200)-0.15, prof.dutyAt(6*3600).toFixed(3));
+  T('تكييف (RC): النسبة طويلة المدى ≈ نسبة الاستقرار (±0.05)', Math.abs(prof.dutyAt(6*3600)-prof.steady)<0.05);
+  T('تكييف (RC): الغرفة باردة أصلاً (20°) → النسبة بتبدأ أقل', acProfile({...AP,room0:20}).dutyAt(1200)<prof.dutyAt(1200));
+  T('تكييف: ساعات تشغيل 20 kWh ≈ 19.9 (بتحسب إن الأول أعلى)', Math.abs(acHoursForEnergy(prof,1325,20)-19.9)<0.6, acHoursForEnergy(prof,1325,20).toFixed(2));
+  const Eac=expectedFor('ac',AP);
+  const onN=sec=>Math.round(prof.onAt(sec));
+  T('حكم تكييف: تشغيل زي المتوقع بالظبط → طبيعي', judgeThermal('ac',{on:1,ses:1,sec:7200,rm:onN(7200)},Eac).state==='normal');
+  T('حكم تكييف: 100% بعد ساعتين والمتوقع ≈ 80% → أعلى من الطبيعي', judgeThermal('ac',{on:1,ses:1,sec:7200,rm:7200},Eac).state==='high');
+  T('حكم تكييف: أول 20 دقيقة → لسه بنقيس', judgeThermal('ac',{on:1,ses:1,sec:900,rm:900},Eac).state==='measuring');
+  T('حكم تكييف: 100% في أول 20 دقيقة طبيعي (pull-down) مش شذوذ', judgeThermal('ac',{on:1,ses:1,sec:1250,rm:1250},Eac).state==='normal');
+  T('حكم تكييف: نفس الفعلي طبيعي في الحر وعالي في الجو المعتدل', (()=>{ const rm=Math.round(0.5*3600); const hot=judgeThermal('ac',{on:1,ses:1,sec:3600,rm},Eac).state, mild=judgeThermal('ac',{on:1,ses:1,sec:3600,rm},expectedFor('ac',{...AP,out:28})).state; return hot==='normal'&&mild==='high'; })());
+  T('حكم تكييف: مش شغال → idle', judgeThermal('ac',{on:0,ses:0,sec:0,rm:0},Eac).state==='idle');
+  const Eh=expectedFor('heater',{...P,set:55});   // السخان 55° (مش 24° بتاعة التكييف)
+  T('حكم سخان: تسخين 50 دقيقة (المتوقع 81) → طبيعي', judgeThermal('heater',{on:1,ses:1,ms:3000},Eh).state==='normal');
+  T('حكم سخان: 7000 ث تسخين متواصل → أعلى من الطبيعي', judgeThermal('heater',{on:1,ses:1,ms:7000},Eh).state==='high');
+  T('حكم سخان: الثرموستات فاصل → طبيعي', judgeThermal('heater',{on:0,ses:1,ms:0},Eh).state==='normal');
+  T('حكم سخان: وصلة ثرموستات قصيرة (300ث) → طبيعي حتى لو التسخين الأولي قصير', judgeThermal('heater',{on:1,ses:1,ms:300},expectedFor('heater',{...P,set:22})).state==='normal');
+  const Ew=expectedFor('washer',{...P,set:40,val:7,w:1760});
+  T('حكم غسالة: تسخين 600ث (المتوقع 666) → طبيعي', judgeThermal('washer',{on:1,ses:1,mode:1,ms:600},Ew).state==='normal');
+  T('حكم غسالة: تسخين 1500ث → أعلى من الطبيعي', judgeThermal('washer',{on:1,ses:1,mode:1,ms:1500},Ew).state==='high');
+  T('حكم غسالة: مرحلة الغسيل → طبيعي', judgeThermal('washer',{on:1,ses:1,mode:2,ms:1700},Ew).state==='normal');
+  return R;
+}
+</script>
+<script>
+const $ = s => document.querySelector(s);
+const DEVS = [
+  {id:'ac1',name:'تكييف 1',icon:'❄️',kind:'hp',val:1.5,unit:'HP',min:.75,max:5,step:.25},
+  {id:'ac2',name:'تكييف 2',icon:'❄️',kind:'hp',val:3,unit:'HP',min:.75,max:5,step:.25},
+  {id:'heater1',name:'سخان 1',icon:'🚿',kind:'l',val:50,unit:'لتر',min:10,max:150,step:5},
+  {id:'heater2',name:'سخان 2',icon:'🚿',kind:'l',val:30,unit:'لتر',min:10,max:150,step:5},
+  {id:'washer',name:'غسالة',icon:'🧺',kind:'kg',val:7,unit:'كجم',min:3,max:15,step:1},
+  {id:'tv',name:'تلفزيون',icon:'📺',kind:'in',val:55,unit:'بوصة',min:20,max:100,step:1},
+];
+const watts = d => {
+  const v = cfg.devs[d.id].val;
+  if (d.kind==='hp') return v*750+200;
+  if (d.kind==='l')  return v<=35?1200: v<=65?1500: v<=95?2000:2500;
+  if (d.kind==='kg') return 1200+v*80;
+  return v*2.2;
+};
+
+// ---------- الإعدادات المحفوظة ----------
+const today = new Date(); const first = new Date(today.getFullYear(),today.getMonth(),1);
+let cfg = JSON.parse(localStorage.getItem('sea')||'null') || {
+  site:'sea-CHANGE-ME-7f3k9q', cap:350, base:300, days:30,
+  cycle: first.toISOString().slice(0,10),
+  devs: Object.fromEntries(DEVS.map(d=>[d.id,{on:true,val:d.val}]))
+};
+cfg.days ||= 30;
+DEVS.forEach(d=>{cfg.devs[d.id] ||= {on:true,val:d.val}});
+const PRESETS={
+  fridge:{name:'تلاجة',w:150,pf:.65,cyc:true}, freezer:{name:'فريزر',w:130,pf:.65,cyc:true},
+  router:{name:'راوتر',w:12,pf:1,cyc:false}, lights:{name:'إضاءة ومتفرقات',w:70,pf:.9,cyc:false},
+  custom:{name:'جهاز 24 ساعة',w:30,pf:.8,cyc:false}};
+if(cfg.v!==3){ DEVS.forEach(d=>{cfg.devs[d.id].on=true}); delete cfg.base; cfg.v=3;
+  cfg.always=['router','lights','fridge'].map(k=>({...PRESETS[k]})); }
+const store = ()=>localStorage.setItem('sea',JSON.stringify(cfg));
+// ظروف الجو + الحرارة المظبوطة + حدود الشرايح (قيم افتراضية لو لسه مفيش)
+cfg.env ||= {out:38, inlet:20};
+if(cfg.env.room0==null) cfg.env.room0=30;
+cfg.tiers ||= TIERS_DEFAULT.slice();
+const SETDEF = {ac1:24, ac2:24, heater1:55, heater2:55, washer:40};
+const AREADEF = {ac1:20, ac2:36};
+DEVS.forEach(d=>{ if(SETDEF[d.id]!=null && cfg.devs[d.id].set==null) cfg.devs[d.id].set=SETDEF[d.id]; if(AREADEF[d.id]!=null && cfg.devs[d.id].area==null) cfg.devs[d.id].area=AREADEF[d.id]; });
+
+// ---------- واجهة الأجهزة ----------
+const SETLBL = {ac1:'الحرارة المظبوطة °م', ac2:'الحرارة المظبوطة °م', heater1:'حرارة السخان °م', heater2:'حرارة السخان °م', washer:'حرارة الغسيل °م'};
+const devsEl = $('#devs');
+DEVS.forEach(d=>{
+  devsEl.insertAdjacentHTML('beforeend',`
+  <div class="card dev" id="c-${d.id}">
+    <div class="row" style="justify-content:space-between">
+      <b>${d.icon} ${d.name}</b><span class="badge" id="b-${d.id}">متوقف</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="switch"><input type="checkbox" id="on-${d.id}"> موجود في البيت</label>
+      <label>${d.unit} <input type="number" id="v-${d.id}" min="${d.min}" max="${d.max}" step="${d.step}"></label>
+      <span class="mut">≈ <span id="ew-${d.id}"></span> W</span>
+      ${SETLBL[d.id]?`<label>${SETLBL[d.id]} <input type="number" id="s-${d.id}" step="1" style="width:70px"></label>`:''}
+      ${d.id.startsWith('ac')?`<label>مساحة الغرفة m² <input type="number" id="ar-${d.id}" min="6" max="80" step="1" style="width:70px"></label>`:''}
+    </div>
+    <div class="mut" style="margin-top:8px"><b id="m-${d.id}" style="color:var(--tx)"></b> السحب الآن: <b id="w-${d.id}">0</b> W · مدة الجلسة: <b id="t-${d.id}">0</b> د (تشغيل فعلي <b id="r-${d.id}">0</b> د · فصل/وصل <b id="y-${d.id}">0</b> مرة) · استهلاكه: <b id="k-${d.id}">0</b> kWh</div>
+    <div class="mut" id="th-${d.id}" style="margin-top:6px"></div>
+    <div id="a-${d.id}"></div>
+    <div class="mut" id="e-${d.id}" style="margin-top:6px"></div>
+  </div>`);
+  $('#on-'+d.id).checked = cfg.devs[d.id].on;
+  $('#v-'+d.id).value = cfg.devs[d.id].val;
+  $('#ew-'+d.id).textContent = Math.round(watts(d));
+  $('#on-'+d.id).onchange = e=>{cfg.devs[d.id].on=e.target.checked; pushConfig();};
+  $('#v-'+d.id).onchange  = e=>{cfg.devs[d.id].val=+e.target.value; $('#ew-'+d.id).textContent=Math.round(watts(d)); pushConfig(); if(lastState) render(lastState);};
+  if($('#ar-'+d.id)){ $('#ar-'+d.id).value=cfg.devs[d.id].area; $('#ar-'+d.id).onchange=e=>{cfg.devs[d.id].area=+e.target.value; pushConfig(); if(lastState) render(lastState);}; }
+  if($('#s-'+d.id)){ $('#s-'+d.id).value=cfg.devs[d.id].set; $('#s-'+d.id).onchange=e=>{cfg.devs[d.id].set=+e.target.value; pushConfig(); if(lastState) render(lastState);}; }
+});
+$('#site').value=cfg.site; $('#cap').value=cfg.cap; $('#cycle').value=cfg.cycle; $('#days').value=cfg.days;
+$('#tiers').value=cfg.tiers.join(',');
+$('#tout').value=cfg.env.out; $('#tin').value=cfg.env.inlet;
+$('#tout').onchange=e=>{cfg.env.out=+e.target.value; pushConfig(); if(lastState) render(lastState);};
+$('#tin').onchange =e=>{cfg.env.inlet=+e.target.value; pushConfig(); if(lastState) render(lastState);};
+$('#troom0').value=cfg.env.room0;
+$('#troom0').onchange=e=>{cfg.env.room0=+e.target.value; pushConfig(); if(lastState) render(lastState);};
+$('#tiers').onchange=e=>{ const a=e.target.value.split(',').map(Number).filter(n=>n>0).sort((x,y)=>x-y); if(a.length){cfg.tiers=a; store(); if(lastState) render(lastState);} };
+async function fetchOutdoor(){
+  const info=$('#envinfo'); info.textContent='بنجيب الحرارة…';
+  let la=30.04, lo=31.24, src='القاهرة (افتراضي)';
+  try{ const p=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(ok,no,{timeout:6000})); la=p.coords.latitude; lo=p.coords.longitude; src='موقعك'; }catch(e){}
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&current=temperature_2m`);
+    const t=(await r.json()).current.temperature_2m;
+    cfg.env.out=Math.round(t*2)/2; $('#tout').value=cfg.env.out; pushConfig(); if(lastState) render(lastState);
+    info.textContent=`الحرارة ${t}°م (${src})`;
+  }catch(e){ info.textContent='ماقدرتش أجيب الحرارة — اكتبها بإيدك'; }
+}
+
+// ---------- أجهزة الـ 24 ساعة ----------
+const TAN = pf => Math.tan(Math.acos(Math.min(1,Math.max(.3,pf))));
+function alwaysPayload(){
+  const k=cfg.always.filter(a=>!a.cyc), c=cfg.always.filter(a=>a.cyc).slice(0,4);
+  return {w:Math.round(k.reduce((s,a)=>s+a.w,0)), q:Math.round(k.reduce((s,a)=>s+a.w*TAN(a.pf),0)), cyc:c.map(a=>({w:a.w,pf:a.pf}))};
+}
+function cycNames(){ return cfg.always.filter(a=>a.cyc).slice(0,4).map(a=>a.name); }
+function renderAlways(){
+  $('#alwaysList').innerHTML = cfg.always.map((a,i)=>`
+    <div class="row" style="margin:6px 0">
+      <input value="${a.name}" style="width:150px" onchange="editAlways(${i},'name',this.value)">
+      <label>W <input type="number" min="1" value="${a.w}" onchange="editAlways(${i},'w',+this.value)"></label>
+      <label>PF <input type="number" min="0.3" max="1" step="0.05" value="${a.pf}" style="width:70px" onchange="editAlways(${i},'pf',+this.value)"></label>
+      <select onchange="editAlways(${i},'cyc',this.value==='1')" style="background:#0b1220;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px">
+        <option value="0" ${a.cyc?'':'selected'}>ثابت</option><option value="1" ${a.cyc?'selected':''}>بيشتغل ويفصل</option></select>
+      <button class="sec" onclick="delAlways(${i})">🗑</button>
+    </div>`).join('') || '<div class="mut">مفيش أجهزة مضافة.</div>';
+  const p=alwaysPayload(), cyc=cfg.always.filter(a=>a.cyc);
+  const avg = p.w + cyc.reduce((s,a)=>s+a.w*0.35,0);
+  $('#alwaysInfo').innerHTML = `الثابت: <b>${p.w}</b> W${cyc.length?` + دوري: ${cyc.map(a=>a.name+' '+a.w+'W').join('، ')} (بيشتغل حوالي 35% من الوقت)`:''} ← متوسط الحمل الأساسي تقريبًا <b>${Math.round(avg)}</b> W (≈ <b>${(avg*24/1000).toFixed(1)}</b> kWh/يوم).` +
+    (cfg.always.filter(a=>a.cyc).length>4?' <span style="color:var(--warn)">الجهاز بيدعم 4 أجهزة "بتشتغل وتفصل" بس.</span>':'');
+}
+function addAlways(k){ cfg.always.push({...PRESETS[k]}); renderAlways(); pushConfig(); }
+function delAlways(i){ cfg.always.splice(i,1); renderAlways(); pushConfig(); }
+function editAlways(i,f,v){ if(f==='name'){cfg.always[i][f]=v;} else if(f==='cyc'){cfg.always[i].cyc=v;} else {cfg.always[i][f]=v>0?v:cfg.always[i][f];} renderAlways(); pushConfig(); }
+function resetTrim(){ if(client&&client.connected) client.publish(topic('cmd'),JSON.stringify({resetTrim:true})); }
+renderAlways();
+
+// ---------- MQTT ----------
+let client, lastState=null, lastSeen=0, series=[], notified={};
+const topic = s => `smartenergy/${cfg.site}/${s}`;
+function connect(){
+  if(client) client.end(true);
+  client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt',{reconnectPeriod:3000});
+  client.on('connect',()=>{ $('#dot').classList.add('on'); $('#conn').textContent='متصل بالسيرفر';
+    client.subscribe([topic('state'),topic('status')]); pushConfig(); });
+  client.on('close',()=>{ $('#dot').classList.remove('on'); $('#conn').textContent='غير متصل'; });
+  client.on('message',(t,m)=>{
+    const s=m.toString();
+    if(t===topic('status')){ $('#devstat').textContent = s==='online'?'متصل ✅':'غير متصل ❌'; return; }
+    try{ lastState=JSON.parse(s); lastSeen=Date.now(); render(lastState);}catch(e){}
+  });
+}
+function pushConfig(){
+  store();
+  if(!client||!client.connected) return;
+  const devices = {}; DEVS.forEach(d=>devices[d.id]={on:cfg.devs[d.id].on,w:Math.round(watts(d)),val:cfg.devs[d.id].val,set:cfg.devs[d.id].set,area:cfg.devs[d.id].area});
+  client.publish(topic('config'),JSON.stringify({cap:cfg.cap,devices,env:{out:cfg.env.out,in:cfg.env.inlet,room0:cfg.env.room0},always:alwaysPayload()}),{retain:true});
+}
+function saveSettings(){
+  cfg.site=$('#site').value.trim(); cfg.cap=+$('#cap').value; cfg.cycle=$('#cycle').value; cfg.days=+$('#days').value||30;
+  store(); connect();
+}
+function resetCounter(){
+  const v = prompt('استهلكت كام kWh من أول الدورة لحد دلوقتي؟ (من فاتورتك أو عداد الكهرباء)', lastState?lastState.kwh.toFixed(1):'0');
+  if(v===null || isNaN(+v)) return;
+  client.publish(topic('cmd'),JSON.stringify({kwh:+v}));
+}
+
+// ---------- حساب المستهلك والمتوقع ----------
+// المستهلك = قراءة البداية اللي ضبطتها + اللي الجهاز قاسه بعدها (kWh = kW × ساعات)
+// معدل اليوم = مزيج بين: (1) اللي الجهاز قاسه  (2) متوسط الدورة من أولها
+//   الوزن بيزيد كل ما ساعات القياس تزيد، ويوصل 100% بعد 48 ساعة قياس
+// المتوقع آخر الدورة = المستهلك الآن + معدل اليوم × الأيام الباقية
+function forecast(s){
+  const DAY=864e5, start=new Date(cfg.cycle).getTime(), total=cfg.days||30;
+  const elapsed=Math.min(total,Math.max(0,(Date.now()-start)/DAY)), left=Math.max(0,total-elapsed);
+  const used=s.kwh, hrs=(s.msec||0)/3600;
+  const measRate = hrs>=0.05 ? (s.meas/hrs)*24 : null;     // kWh/يوم من القياس
+  const histRate = elapsed>=1 ? used/elapsed : null;       // kWh/يوم من تاريخ الدورة
+  const w = Math.min(1, hrs/48);
+  let rate=null;
+  if(measRate!=null && histRate!=null) rate = w*measRate+(1-w)*histRate;
+  else rate = measRate!=null ? measRate : histRate;
+  const proj = rate==null ? null : used + rate*left;
+  let capDate=null;
+  if(rate>0 && used<s.cap){ const d=(s.cap-used)/rate; if(d<=left) capDate=new Date(Date.now()+d*DAY); }
+  return {elapsed,left,rate,proj,capDate,hrs,w,hasHist:histRate!=null};
+}
+function renderBreakdown(s){
+  const cn=cycNames();
+  const rows=s.dev.map(x=>{ const m=/^bg(\d)$/.exec(x.id);
+    return {n: m ? '🏠 '+(cn[+m[1]]||'جهاز 24 ساعة') : ((DEVS.find(q=>q.id===x.id)||{}).name||x.id), k:x.kwh}; });
+  rows.push({n:'🏠 حمل أساسي ثابت (راوتر، إضاءة...)',k:s.bkwh},{n:'❔ غير متعرّف عليه',k:s.okwh});
+  const tot=rows.reduce((a,r)=>a+r.k,0);
+  if(tot<=0){ $('#breakdown').textContent='لسه مفيش قياس.'; return; }
+  $('#breakdown').innerHTML=rows.sort((a,b)=>b.k-a.k).map(r=>{const p=r.k/tot*100;
+    return `<div style="margin:6px 0"><div class="row" style="justify-content:space-between"><span>${r.n}</span><span class="mut">${r.k.toFixed(2)} kWh · ${p.toFixed(0)}%</span></div><div class="bar"><i style="width:${p}%;background:var(--acc)"></i></div></div>`}).join('');
+}
+
+// ---------- النصائح ----------
+const KIND={ac1:'ac',ac2:'ac',heater1:'heater',heater2:'heater',washer:'washer',tv:'tv'};
+const MODE={ac:['','كومبروسر شغال','مروحة بس (الكومبروسر فاصل)'], heater:['','تسخين'], washer:['','تسخين مية','غسيل (موتور)','عصر'], tv:['','شغال']};
+// نصيحة التلفزيون (التكييف والسخان والغسالة ليهم حكم تاني حسب فرق الحرارة: تحت)
+function deviceAdvice(d,x,rem,projOver){
+  return {lvl:'ok',t:'قلل السطوع أو فعّل وضع Eco، واقفله من الزرار مش من الريموت لو مش بتتفرج.'};
+}
+const devParams = d => ({out:cfg.env.out, inlet:cfg.env.inlet, room0:cfg.env.room0, set:cfg.devs[d.id].set, val:cfg.devs[d.id].val, area:cfg.devs[d.id].area, w:watts(d)});
+const minTxt = sec => (sec/60).toFixed(0)+' دقيقة';
+function thermalTip(d,k,x,J,P){
+  if(k==='ac') return `الكومبروسور شغال ${Math.round(J.observed*100)}% من الوقت، والمتوقع لحد دلوقتي ≈ ${Math.round(J.expected*100)}% (الجو ${P.out}° والمظبوط ${P.set}° وغرفة ${P.area} م²). غالبًا باب أو شباك مفتوح، أو فلتر/مكثف متسخ، أو الغرفة أكبر من قدرة التكييف.`;
+  if(k==='heater') return `السخان شغال تسخين متواصل بقاله ${minTxt(J.observedSec)} والمتوقع ≈ ${minTxt(J.expectedSec)} (${P.val} لتر من ${P.inlet}° لـ ${P.set}°). غالبًا ترسّبات على العنصر أو العنصر ضعيف أو الثرموستات مش بيفصل.`;
+  return `الغسالة بتسخّن المية بقالها ${minTxt(J.observedSec)} والمتوقع ≈ ${minTxt(J.expectedSec)} (من ${P.inlet}° لـ ${P.set}°). راجع العنصر أو حرارة الغسيل المظبوطة.`;
+}
+function thermalLine(k,J,P){
+  if(J.state==='measuring') return `⏳ بنقيس نسبة تشغيل الكومبروسور (محتاج ${JUDGE.AC_MIN_SEC/60} دقيقة من بداية الجلسة) · المتوقع دلوقتي ≈ ${Math.round(J.expected*100)}%`;
+  if(k==='ac'){ const pr=acProfile(P); return `✅ شغال بالمعدل الطبيعي · نسبة تشغيل الكومبروسور ${Math.round(J.observed*100)}% (المتوقع دلوقتي ≈ ${Math.round(J.expected*100)}%) · الكومبروسور مش ثابت: بيبدأ ≈${Math.round(pr.dutyAt(1200)*100)}% في أول 20 دقيقة (pull-down) وبيستقر ≈${Math.round(pr.steady*100)}%`; }
+  if(k==='heater') return `✅ شغال بالمعدل الطبيعي · التسخين المتوقع ≈ ${minTxt(J.expectedSec)} (${P.val} لتر من ${P.inlet}° لـ ${P.set}°)`;
+  return J.expectedSec!=null ? `✅ التسخين طبيعي · المتوقع ≈ ${minTxt(J.expectedSec)}` : '';
+}
+// ينفع يشتغل قد إيه ويفضل في الشريحة؟ (تكييف وسخان)
+function enduranceHTML(d,s,f){
+  const k=KIND[d.id]; if((k!=='ac'&&k!=='heater')||!cfg.devs[d.id].on) return '';
+  const P=devParams(d), E=expectedFor(k,P), used=s.kwh, tiers=cfg.tiers;
+  const avgKW = k==='ac' ? P.w*E.steady/1000 : P.w/1000;       // متوسط السحب في الاستقرار = P_rated × d
+  const en=endurance(used,tiers,avgKW); if(!en) return '';
+  if(k==='ac'){                                                  // الساعات من منحنى الغرفة (أول التشغيل أعلى من الاستقرار)
+    en.hoursLeft = acHoursForEnergy(E.profile,P.w,en.leftKWh);
+    en.hoursNext = en.nextSpanKWh==null ? null : acHoursForEnergy(E.profile,P.w,en.leftKWh+en.nextSpanKWh)-en.hoursLeft;
+  }
+  const t=en.tier, rng=x=>`${x.start?x.start+1:0}–${x.end===Infinity?'∞':x.end}`;
+  const kwhPerHeat = k==='heater' ? P.w/1000*E.heatSec/3600 : 0;
+  const unit = h => k==='heater' && kwhPerHeat>0 ? `${Math.floor(h*avgKW/kwhPerHeat)} مرة تسخين` : fmtHours(h);
+  let o = `<b>⏱ ينفع يشتغل قد إيه؟</b> `;
+  o += k==='ac' ? `متوسط سحبه ≈ ${Math.round(avgKW*1000)} W (نسبة تشغيل الاستقرار ${Math.round(E.steady*100)}% × ${Math.round(P.w)} W، غرفة ${P.area} م²، فرق حرارة ${(P.out-P.set).toFixed(0)}°م)`
+                : `كل تسخينة ≈ ${kwhPerHeat.toFixed(2)} kWh وبتاخد ${minTxt(E.heatSec)}`;
+  if(t.last) return o+`<div>أنت في آخر شريحة (أكتر من ${tiers[tiers.length-1]} kWh) وبأعلى سعر.</div>`;
+  o += `<div>• في شريحتك الحالية (${t.n}: ${rng(t)} kWh): فاضل <b>${en.leftKWh.toFixed(1)}</b> kWh = <b>${unit(en.hoursLeft)}</b> قبل ما تعدّيها.</div>`;
+  if(en.nextSpanKWh!=null) o += `<div>• لو عدّيتها، الشريحة ${t.n+1} (${rng({start:t.end,end:t.nextEnd})} kWh) ${isFinite(en.nextSpanKWh)?`فيها ${en.nextSpanKWh} kWh = ${unit(en.hoursNext)} كمان`:'مفتوحة من غير حد'}.</div>`;
+  const me=s.dev.find(q=>q.id===d.id);
+  if(f.rate!=null && me && (s.msec||0)>=180){
+    const devRate = me.kwh/((s.msec)/3600)*24, other=Math.max(0,f.rate-devRate);
+    const h=dailyHours(en.leftKWh,Math.max(1,f.left),other,avgKW);
+    o += `<div>• عشان تفضل في الشريحة لحد آخر الدورة: ينفع ${k==='ac'?`<b>${fmtHours(h)}</b> في اليوم`:`<b>${Math.floor(h*avgKW/kwhPerHeat)}</b> تسخينة في اليوم`} (بعد خصم باقي استهلاك البيت ≈ ${other.toFixed(1)} kWh/يوم).</div>`;
+  }
+  return o;
+}
+function render(s){
+  const used=s.kwh, cap=s.cap, rem=Math.max(0,cap-used);
+  $('#pw').textContent=s.p; $('#pf').textContent=s.pf;
+  $('#vi').textContent = s.v ? `${s.v} V · ${s.i} A` : '--';
+  $('#kwh').textContent=used.toFixed(1); $('#capv').textContent=cap; $('#rem').textContent=rem.toFixed(1);
+  const pct=Math.min(100,used/cap*100); const bar=$('#capbar');
+  bar.style.width=pct+'%'; bar.style.background = pct>90?'var(--bad)':pct>75?'var(--warn)':'var(--ok)';
+  const f=forecast(s), proj=f.proj, daysLeft=Math.max(1,f.left), projOver=proj!=null&&proj>cap;
+  $('#perday').textContent=(rem/daysLeft).toFixed(1);
+  $('#elapsed').textContent=f.elapsed.toFixed(1); $('#left').textContent=f.left.toFixed(1);
+  $('#rate').textContent=f.rate==null?'--':f.rate.toFixed(1);
+  $('#proj').textContent=proj==null?'--':proj.toFixed(0);
+  $('#proj').style.color=proj==null?'':projOver?'var(--bad)':'var(--ok)';
+  $('#capdate').textContent = used>=cap?'عدّيت الحد ⛔' : f.capDate ? f.capDate.toLocaleDateString('ar-EG',{day:'numeric',month:'long'}) : (proj==null?'--':'مش هتوصل ✅');
+  $('#acc').textContent = f.rate==null ? 'محتاج وقت قياس أكتر' :
+    `دقة التوقع ${Math.round((f.hasHist?f.w:1)*100)}% · ساعات القياس: ${f.hrs.toFixed(1)}`;
+  renderBreakdown(s);
+  const CLS={none:'مفيش حمل فوق الأساسي',res:'حمل مقاوم (سخان / إضاءة / تلفزيون)',ind:'حمل حثي (موتور / كومبروسور زي التكييف)',mixed:'حمل مختلط: جزء حثي + جزء مقاوم شغالين مع بعض'};
+  $('#loadinfo').innerHTML = `<div style="font-size:16px;color:var(--tx)">${CLS[s.cls]||'--'}</div><div style="margin-top:6px">حثي ≈ <b>${s.ind||0}</b> W · مقاوم ≈ <b>${s.res||0}</b> W · PF الكلي <b>${s.pf}</b></div><div style="margin-top:4px">لما الـ PF يبقى بين الحثي (~0.8) والمقاوم (~1) ده معناه إن الاتنين شغالين مع بعض.</div>`;
+
+  const top=[];
+  if(rem<=0) top.push({lvl:'bad',t:'⛔ عديت حد الشريحة! أي استهلاك زيادة هيتحاسب بسعر أعلى.'});
+  else if(rem<30) top.push({lvl:'bad',t:`⚠️ فاضل ${rem.toFixed(1)} kWh بس على حد الشريحة. أجّل الأحمال الكبيرة.`});
+  else if(projOver) top.push({lvl:'warn',t:`📈 بمعدلك الحالي (${f.rate.toFixed(1)} kWh/يوم) هتوصل ${proj.toFixed(0)} kWh آخر الدورة (الحد ${cap})${f.capDate?'، وهتعدّي الحد حوالي '+f.capDate.toLocaleDateString('ar-EG',{day:'numeric',month:'long'}):''}. لازم تقلل لـ ${(rem/daysLeft).toFixed(1)} kWh/يوم.`});
+  else if(proj!=null) top.push({lvl:'ok',t:`✅ معدلك مناسب: المتوقع ${proj.toFixed(0)} kWh من ${cap}. المتاح يوميًا ${(rem/daysLeft).toFixed(1)} kWh.`});
+  else top.push({lvl:'warn',t:'ℹ️ اضغط "ضبط استهلاك الدورة الحالي" وادخل قراءتك علشان التوقع يبقى دقيق.'});
+  if(s.unk) top.push({lvl:'warn',t:'في حمل كبير مش متعرّف عليه. راجع الأجهزة المفعّلة، أو ضيف أجهزة الـ 24 ساعة اللي ناقصة.'});
+
+  s.dev.forEach(x=>{
+    const d=DEVS.find(q=>q.id===x.id); if(!d) return;     // أجهزة الـ 24 ساعة بتتعرض في التوزيع
+    const c=$('#c-'+x.id), active=!!(x.on||x.ses), k=KIND[d.id];
+    c.classList.toggle('run',active);
+    $('#b-'+x.id).textContent = x.on?'متوقع شغال':(x.ses?'في راحة (ثرموستات)':'مش شغال'); $('#b-'+x.id).classList.toggle('on',active);
+    $('#m-'+x.id).textContent = x.on&&MODE[k][x.mode] ? MODE[k][x.mode]+' · ' : '';
+    $('#w-'+x.id).textContent=x.w; $('#t-'+x.id).textContent=(x.sec/60).toFixed(0);
+    $('#r-'+x.id).textContent=((x.run||0)/60).toFixed(0); $('#y-'+x.id).textContent=x.cyc||0; $('#k-'+x.id).textContent=x.kwh.toFixed(2);
+    const a=$('#a-'+x.id), th=$('#th-'+x.id);
+    let tip=null; th.innerHTML='';
+    if(active){
+      if(k==='tv') tip=deviceAdvice(d,x,rem,projOver);
+      else {
+        // تكييف / سخان / غسالة: لو شغالين بالمعدل الطبيعي لفرق الحرارة → مفيش نصيحة
+        const P=devParams(d), J=judgeThermal(k,x,expectedFor(k,P));
+        if(J.state==='high') tip={lvl:'warn',t:thermalTip(d,k,x,J,P)};
+        else th.textContent=thermalLine(k,J,P)+(x.rt!=null?` · 🌡️ حرارة الغرفة (محاكاة) ${x.rt}°م`:'');
+      }
+    }
+    if(tip){
+      a.innerHTML=`<div class="advice ${tip.lvl}">${tip.t}</div>`;
+      c.classList.toggle('warn',tip.lvl!=='ok');
+      top.push({lvl:tip.lvl,t:`${d.icon} ${d.name}: ${tip.t}`});
+      if((tip.lvl==='bad'||(tip.lvl==='warn'&&k!=='tv')) && !notified[x.id]){ notified[x.id]=1; notify(d.name,tip.t); }
+    } else { a.innerHTML=''; c.classList.remove('warn'); notified[x.id]=0; }
+    $('#e-'+x.id).innerHTML = enduranceHTML(d,s,f);
+  });
+  const tr=s.trim||0;
+  $('#alwaysInfo').dataset.live = '';
+  if(typeof s.base==='number') $('#alwaysInfo').innerHTML = $('#alwaysInfo').innerHTML.replace(/<div id="live">.*?<\/div>/,'') +
+    `<div id="live" style="margin-top:4px">الحمل الأساسي الفعلي دلوقتي: <b>${s.base}</b> W · التصحيح المتعلَّم: <b>${tr>=0?'+':''}${tr}</b> W${Math.abs(tr)>40?' <span style="color:var(--warn)">— غالبًا في جهاز 24 ساعة ناقص، ضيفه فوق.</span>':''}</div>`;
+  $('#topAdvice').innerHTML=top.map(a=>`<div class="advice ${a.lvl}">${a.t}</div>`).join('');
+
+  series.push(s.p); if(series.length>150) series.shift(); drawChart();
+}
+function drawChart(){
+  const c=$('#chart'),g=c.getContext('2d'),W=c.width,H=c.height; g.clearRect(0,0,W,H);
+  const max=Math.max(1000,...series); g.strokeStyle='#38bdf8'; g.lineWidth=2; g.beginPath();
+  series.forEach((v,i)=>{const x=i/149*W,y=H-v/max*(H-10)-5; i?g.lineTo(x,y):g.moveTo(x,y)}); g.stroke();
+  g.fillStyle='#94a3b8'; g.font='12px Tahoma'; g.fillText(max+' W',6,14);
+}
+function askNotif(){ if('Notification' in window) Notification.requestPermission(); }
+function notify(t,b){ if('Notification' in window && Notification.permission==='granted') new Notification(t,{body:b}); }
+setInterval(()=>{ if(lastSeen && Date.now()-lastSeen>8000) $('#devstat').textContent='مفيش بيانات ❌'; },3000);
+// ---------- وضع الاختبار (افتح الصفحة بـ ?test) ----------
+const mkDev=(id,o)=>Object.assign({id,on:0,mode:0,ses:0,w:0,sec:0,run:0,cyc:0,kwh:0,rm:0,ms:0},o||{});
+const mkState=(kwh,devs)=>({p:1500,v:220,i:'7.0',cls:'ind',ind:1400,res:0,pf:'0.82',kwh,cap:350,base:82,trim:0,meas:5,msec:36000,bkwh:1,okwh:0,unk:0,
+  dev:['ac1','ac2','heater1','heater2','washer','tv'].map(id=>mkDev(id,(devs||{})[id]))});
+const PR=(o={})=>acProfile({out:38,set:24,area:20,w:1325,room0:30,...o});
+const BASECFG={out:38,inlet:20,room0:30,area:{ac1:20,ac2:36},set:{ac1:24,ac2:24,heater1:55,heater2:55,washer:40},val:{ac1:1.5,ac2:3,heater1:50,heater2:30,washer:7}};
+const SCEN=[
+ {n:'تكييف بعد ساعتين بالمعدل الطبيعي (المنحنى المتوقع من نموذج RC) → مفيش نصيحة', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
+  chk:q=>[['مفيش نصيحة للتكييف',!q.top.includes('تكييف 1')&&q.adv('ac1')===''],['الكارت بيقول طبيعي',q.th('ac1').includes('طبيعي')],['بيشرح إن الكومبروسور مش ثابت',q.th('ac1').includes('pull-down')]]},
+ {n:'تكييف كومبروسوره شغال 100% بعد ساعتين (المتوقع ≈ 80%) → نصيحة', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:7200,rm:7200,kwh:3}}),
+  chk:q=>[['ظهرت نصيحة التكييف',q.top.includes('تكييف 1')&&q.adv('ac1').includes('الكومبروسور')]]},
+ {n:'تكييف في أول 15 دقيقة → بنقيس (من غير نصيحة)', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:900,run:900,rm:900}}),
+  chk:q=>[['مفيش نصيحة',!q.top.includes('تكييف 1')],['بيقول بنقيس',q.th('ac1').includes('بنقيس')]]},
+ {n:'100% في أول 25 دقيقة (pull-down) → طبيعي مش شذوذ', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:1500,run:1500,rm:1500}}),
+  chk:q=>[['مفيش نصيحة',!q.top.includes('تكييف 1')]]},
+ {n:'نفس التشغيل الفعلي — جو 38° طبيعي', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:3600,run:2400,rm:Math.round(0.5*3600)}}),
+  chk:q=>[['طبيعي في الحر',!q.top.includes('تكييف 1')]]},
+ {n:'نفس التشغيل الفعلي (50%) — جو 28° (المتوقع أقل بكتير) → نصيحة', cfg:{out:28}, st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:3600,run:2400,rm:Math.round(0.5*3600)}}),
+  chk:q=>[['اتحسب كزيادة عن الطبيعي',q.top.includes('تكييف 1')]]},
+ {n:'غرفة أكبر (36م² بدل 20م²) بنفس التكييف → المتوقع أعلى فمفيش نصيحة لنفس الفعلي', cfg:{area:{ac1:36}}, st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:7200,rm:Math.round(0.95*7200)}}),
+  chk:q=>[['مفيش نصيحة',!q.top.includes('تكييف 1')]]},
+ {n:'سخان بيسخّن 50 دقيقة (المتوقع ≈81 د) → طبيعي', st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:3000,run:3000,rm:3000,ms:3000}}),
+  chk:q=>[['مفيش نصيحة',!q.top.includes('سخان 1')],['كارت: طبيعي',q.th('heater1').includes('طبيعي')]]},
+ {n:'سخان تسخين متواصل 7000 ث (المتوقع 4883) → نصيحة', st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:7000,run:7000,rm:7000,ms:7000}}),
+  chk:q=>[['ظهرت نصيحة السخان',q.top.includes('سخان 1')]]},
+ {n:'سخان فاصل بالثرموستات → مفيش نصيحة (القديمة اتشالت)', st:()=>mkState(180,{heater1:{on:0,ses:1,sec:9000,run:5000,rm:5000,ms:0}}),
+  chk:q=>[['مفيش نصيحة',!q.top.includes('سخان 1')&&!q.top.includes('متوصّل')]]},
+ {n:'سخان بحرارة 60° بدل 55° → وقت المتوقع أطول', cfg:{set:{heater1:60}}, st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:3000,run:3000,rm:3000,ms:3000}}),
+  chk:q=>[['المتوقع ≈ 93 د',q.th('heater1').includes('93')]]},
+ {n:'غسالة بتسخّن 600 ث (المتوقع ≈11 د) → طبيعي', st:()=>mkState(180,{washer:{on:1,mode:1,ses:1,sec:600,run:600,rm:600,ms:600}}),
+  chk:q=>[['مفيش نصيحة',!q.top.includes('غسالة')]]},
+ {n:'غسالة بتسخّن 1500 ث → نصيحة', st:()=>mkState(180,{washer:{on:1,mode:1,ses:1,sec:1500,run:1500,rm:1500,ms:1500}}),
+  chk:q=>[['ظهرت نصيحة الغسالة',q.top.includes('غسالة')]]},
+ {n:'غسالة في مرحلة الغسيل → مفيش نصيحة', st:()=>mkState(180,{washer:{on:1,mode:2,ses:1,sec:2400,run:2400,rm:700,ms:1700}}),
+  chk:q=>[['مفيش نصيحة',!q.top.includes('غسالة')]]},
+ {n:'تحمّل التكييف جوه الشريحة (180 kWh → الشريحة 3 فاضل 20)', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
+  chk:q=>[['الشريحة الحالية 101–200',q.end('ac1').includes('3: 101–200')],['فاضل 20.0',q.end('ac1').includes('فاضل 20.0')],['الشريحة الجاية 201–350 فيها 150',q.end('ac1').includes('201–350')&&q.end('ac1').includes('150 kWh')],['متوسط السحب ≈ 1027 W (UA·ΔT÷COP)',q.end('ac1').includes('1027')],['فيه ساعات/يوم',q.end('ac1').includes('في اليوم')]]},
+ {n:'تحمّل السخان بعدد التسخينات', st:()=>mkState(180,{}),
+  chk:q=>[['بيقول مرة تسخين',q.end('heater1').includes('مرة تسخين')]]},
+ {n:'فوق 1000 kWh → آخر شريحة', st:()=>mkState(1200,{}),
+  chk:q=>[['آخر شريحة',q.end('ac1').includes('آخر شريحة')]]},
+ {n:'التلفزيون لسه بياخد نصيحته', st:()=>mkState(180,{tv:{on:1,mode:1,ses:1,sec:600,run:600,w:100}}),
+  chk:q=>[['نصيحة التلفزيون',q.top.includes('تلفزيون')]]},
+];
+function runScenario(sc){
+  const backup=JSON.stringify(cfg), nb=JSON.stringify(notified), res=[];
+  try{
+    const o=Object.assign({},BASECFG,sc.cfg||{}); cfg.env.out=o.out; cfg.env.inlet=o.inlet; cfg.env.room0=o.room0;
+    ['ac1','ac2'].forEach(id=>cfg.devs[id].area=(sc.cfg&&sc.cfg.area&&sc.cfg.area[id]!=null)?sc.cfg.area[id]:BASECFG.area[id]);
+    Object.keys(BASECFG.set).forEach(id=>{cfg.devs[id].set=(sc.cfg&&sc.cfg.set&&sc.cfg.set[id]!=null)?sc.cfg.set[id]:BASECFG.set[id]; cfg.devs[id].val=BASECFG.val[id]; cfg.devs[id].on=true;});
+    cfg.tiers=TIERS_DEFAULT.slice();
+    render(sc.st());
+    const q={top:$('#topAdvice').textContent, th:id=>$('#th-'+id).textContent, adv:id=>$('#a-'+id).textContent, end:id=>$('#e-'+id).textContent};
+    sc.chk(q).forEach(([d,ok])=>res.push({name:sc.n+' ← '+d,ok}));
+  }catch(e){ res.push({name:sc.n+' ← خطأ: '+e.message,ok:false}); }
+  cfg=JSON.parse(backup); notified=JSON.parse(nb);
+  return res;
+}
+function runAllScenarios(){
+  let all=runLogicTests().map(r=>({name:'[منطق] '+r.name,ok:r.ok,detail:r.detail}));
+  SCEN.forEach(sc=>all=all.concat(runScenario(sc)));
+  const bad=all.filter(r=>!r.ok);
+  $('#testOut').innerHTML=`<div class="advice ${bad.length?'bad':''}" style="font-size:16px"><b>${all.length-bad.length} / ${all.length} نجح</b>${bad.length?' — فيه '+bad.length+' فشل':''}</div>`+
+    all.map(r=>`<div style="margin:3px 0;color:${r.ok?'var(--ok)':'var(--bad)'}">${r.ok?'✅':'❌'} ${r.name} <span class="mut">${r.detail||''}</span></div>`).join('');
+  window.__testResults=all; return all;
+}
+function sendFault(k){ if(client&&client.connected) client.publish(topic('cmd'),JSON.stringify({fault:k})); else alert('مش متصل بالسيرفر'); }
+if(/[?&]test/.test(location.search)) $('#testPanel').hidden=false;
+
+connect();
+</script>
+</body>
+</html>
