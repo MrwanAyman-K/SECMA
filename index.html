@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>مستشار الطاقة الذكي</title>
-<script src="https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
 :root{--bg:#0f172a;--card:#1e293b;--line:#334155;--tx:#e2e8f0;--mut:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--acc:#38bdf8}
 *{box-sizing:border-box}
@@ -32,22 +33,50 @@ button.sec{background:#0b1220;color:var(--tx);border:1px solid var(--line)}
 .switch{display:flex;align-items:center;gap:6px}
 canvas{width:100%;height:120px;background:#0b1220;border-radius:8px}
 #top .advice{margin:6px 0 0}
+#auth{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+#auth .box{width:100%;max-width:380px}
+#auth input{width:100%;margin:6px 0}
+#auth .row button{flex:1}
+#authMsg{min-height:20px;font-size:14px;margin-top:8px;line-height:1.6}
+#authMsg.err{color:#fecaca}#authMsg.ok{color:#bbf7d0}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
+<div id="auth">
+  <div class="box card">
+    <h1>⚡ مستشار الطاقة الذكي</h1>
+    <div class="mut" id="authSub">سجّل دخول عشان إعداداتك وسجل استهلاكك يتحفظوا على حسابك.</div>
+    <div id="authForm">
+      <input id="aEmail" type="email" placeholder="الإيميل" autocomplete="email" dir="ltr">
+      <input id="aPass" type="password" placeholder="كلمة السر (8 حروف على الأقل)" autocomplete="current-password" dir="ltr">
+      <div class="row" style="margin-top:6px">
+        <button onclick="doSignIn()">دخول</button>
+        <button class="sec" onclick="doSignUp()">حساب جديد</button>
+      </div>
+      <div class="row" style="margin-top:8px;justify-content:space-between">
+        <button class="sec" style="flex:none" onclick="doReset()">نسيت كلمة السر</button>
+        <button class="sec" style="flex:none" onclick="startLocal()">تجربة بدون حساب</button>
+      </div>
+    </div>
+    <div id="authMsg"></div>
+  </div>
+</div>
 <div class="row" style="justify-content:space-between">
   <div><h1>⚡ مستشار الطاقة الذكي</h1>
   <span class="mut"><span id="dot" class="dot"></span> <span id="conn">غير متصل</span> · الجهاز: <span id="devstat">--</span></span></div>
   <div class="row">
     <button class="sec" onclick="document.getElementById('settings').hidden^=1">⚙️ الإعدادات</button>
     <button class="sec" onclick="askNotif()">🔔 الإشعارات</button>
+    <span id="cloud" class="mut"></span>
+    <button class="sec" id="userBtn" onclick="signOut()" hidden></button>
   </div>
 </div>
 
 <div id="settings" class="card" hidden style="margin-top:10px">
   <h2>الإعدادات العامة</h2>
   <div class="row">
-    <label>كود الموقع (نفس SITE_ID) <input id="site" style="width:220px"></label>
+    <label>كود جهازك (حطه في الفيرموير كـ SITE_ID) <input id="site" style="width:300px;max-width:100%"></label>
     <label>حد الشريحة kWh <input id="cap" type="number"></label>
     <label>بداية الدورة <input id="cycle" type="date"></label>
     <label>أيام الدورة <input id="days" type="number" min="28" max="35"></label>
@@ -72,6 +101,11 @@ canvas{width:100%;height:120px;background:#0b1220;border-radius:8px}
     <div><div class="mut">هتوصل لحد الشريحة</div><div><b id="capdate">--</b></div><div class="mut" id="acc"></div></div>
   </div>
   <canvas id="chart" width="900" height="120" style="margin-top:12px"></canvas>
+</div>
+
+<div class="card" id="histCard" hidden><h2>📈 السجل المحفوظ (آخر 14 يوم)</h2>
+  <canvas id="hist" width="900" height="160"></canvas>
+  <div class="mut" id="histInfo" style="margin-top:6px">بنسجّل قراءة كل 5 دقايق وانت فاتح التطبيق.</div>
 </div>
 
 <div class="card"><h2>🌡️ الجو والحرارة (بيحدّدوا شغل التكييف والسخان والغسالة)</h2>
@@ -271,7 +305,7 @@ function runLogicTests(){
   return R;
 }
 </script>
-<script>
+<script type="text/plain" id="main-src">
 const $ = s => document.querySelector(s);
 const DEVS = [
   {id:'ac1',name:'تكييف 1',icon:'❄️',kind:'hp',val:1.5,unit:'HP',min:.75,max:5,step:.25},
@@ -291,8 +325,8 @@ const watts = d => {
 
 // ---------- الإعدادات المحفوظة ----------
 const today = new Date(); const first = new Date(today.getFullYear(),today.getMonth(),1);
-let cfg = JSON.parse(localStorage.getItem('sea')||'null') || {
-  site:'sea-CHANGE-ME-7f3k9q', cap:350, base:300, days:30,
+let cfg = (window.__BOOT && window.__BOOT.cfg) || {
+  site:newSiteId(), cap:350, base:300, days:30,
   cycle: first.toISOString().slice(0,10),
   devs: Object.fromEntries(DEVS.map(d=>[d.id,{on:true,val:d.val}]))
 };
@@ -304,7 +338,7 @@ const PRESETS={
   custom:{name:'جهاز 24 ساعة',w:30,pf:.8,cyc:false}};
 if(cfg.v!==3){ DEVS.forEach(d=>{cfg.devs[d.id].on=true}); delete cfg.base; cfg.v=3;
   cfg.always=['router','lights','fridge'].map(k=>({...PRESETS[k]})); }
-const store = ()=>localStorage.setItem('sea',JSON.stringify(cfg));
+const store = ()=>persistCfg(cfg);
 // ظروف الجو + الحرارة المظبوطة + حدود الشرايح (قيم افتراضية لو لسه مفيش)
 cfg.env ||= {out:38, inlet:20};
 if(cfg.env.room0==null) cfg.env.room0=30;
@@ -561,6 +595,7 @@ function render(s){
   $('#topAdvice').innerHTML=top.map(a=>`<div class="advice ${a.lvl}">${a.t}</div>`).join('');
 
   series.push(s.p); if(series.length>150) series.shift(); drawChart();
+  trackReading(s);
 }
 function drawChart(){
   const c=$('#chart'),g=c.getContext('2d'),W=c.width,H=c.height; g.clearRect(0,0,W,H);
@@ -641,6 +676,139 @@ function sendFault(k){ if(client&&client.connected) client.publish(topic('cmd'),
 if(/[?&]test/.test(location.search)) $('#testPanel').hidden=false;
 
 connect();
+loadHistory();
+</script>
+
+<script>
+// ====================== إعداد Supabase (الصق قيمك هنا) ======================
+const SUPABASE_URL = 'https://yevetvuazfyfunomwpom.supabase.co/rest/v1/';          // مثال: https://abcd1234.supabase.co
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlldmV0dnVhemZ5ZnVub213cG9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MDMwOTAsImV4cCI6MjEwNzM3OTA5MH0.79Xly9DUEYq9TDMTaOhS-fCMJErk2apyAbgo1NAMVyw'; // المفتاح العام (anon / publishable) مش الـ service_role
+// ============================================================================
+const $a = s => document.querySelector(s);
+const LS = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const CONFIGURED = !/PASTE_/.test(SUPABASE_URL+SUPABASE_ANON_KEY) && typeof supabase!=='undefined';
+const sb = CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {auth:{persistSession:true,autoRefreshToken:true}}) : null;
+let currentUser = null, started = false;
+
+function newSiteId(){ const a=new Uint8Array(12); crypto.getRandomValues(a); return 'sea-'+Array.from(a,b=>b.toString(16).padStart(2,'0')).join(''); }
+const cacheKey = () => currentUser ? 'sea:'+currentUser.id : 'sea';
+function authMsg(t,cls){ const m=$a('#authMsg'); m.textContent=t||''; m.className=cls||''; }
+function showAuth(){ $a('#auth').hidden=false; }
+function setCloud(t){ $a('#cloud').textContent=t||''; }
+
+// ---------- حفظ الإعدادات ----------
+let saveT=null;
+function persistCfg(cfg){
+  LS.set(cacheKey(), JSON.stringify(cfg));
+  if(!sb||!currentUser) return;
+  setCloud('⏳ بيتحفظ…'); clearTimeout(saveT);
+  saveT=setTimeout(async()=>{
+    try{
+      const {error}=await sb.from('user_settings').upsert({user_id:currentUser.id,cfg,updated_at:new Date().toISOString()});
+      if(error) throw error; setCloud('☁️ اتحفظ');
+    }catch(e){ console.error(e); setCloud('⚠️ مش اتحفظ على السيرفر'); }
+  },800);
+}
+async function loadCloudCfg(){
+  const {data,error}=await sb.from('user_settings').select('cfg').eq('user_id',currentUser.id).maybeSingle();
+  if(error) throw error;
+  if(data && data.cfg) return data.cfg;
+  // أول دخول: لو فيه إعدادات قديمة محفوظة في المتصفح انقلها (مع كود جهاز جديد لو كان الافتراضي القديم)
+  const old = LS.get('sea');
+  if(old){ try{ const c=JSON.parse(old); if(c && (!c.site || /CHANGE-ME/.test(c.site))) c.site=newSiteId(); return c; }catch(e){} }
+  return null;
+}
+
+// ---------- تسجيل الدخول ----------
+function creds(){ return {email:$a('#aEmail').value.trim(), password:$a('#aPass').value}; }
+async function doSignIn(){
+  if(!sb) return authMsg('لسه ما ربطتش Supabase — حط الرابط والمفتاح في أول سكريبت بالملف.','err');
+  const {email,password}=creds(); if(!email||!password) return authMsg('اكتب الإيميل وكلمة السر.','err');
+  authMsg('بندخّلك…');
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  if(error) return authMsg(/confirm/i.test(error.message)?'لازم تأكد الإيميل الأول (شوف رسالة التأكيد).':'الإيميل أو كلمة السر غلط.','err');
+  startFor(data.user);
+}
+async function doSignUp(){
+  if(!sb) return authMsg('لسه ما ربطتش Supabase — حط الرابط والمفتاح في أول سكريبت بالملف.','err');
+  const {email,password}=creds(); if(!email||password.length<8) return authMsg('اكتب إيميل صحيح وكلمة سر 8 حروف على الأقل.','err');
+  authMsg('بنعمل الحساب…');
+  const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});
+  if(error) return authMsg(error.message,'err');
+  if(data.session) startFor(data.user);
+  else authMsg('اتبعتلك إيميل تأكيد. افتحه وبعدين اضغط دخول.','ok');
+}
+async function doReset(){
+  if(!sb) return authMsg('لسه ما ربطتش Supabase.','err');
+  const {email}=creds(); if(!email) return authMsg('اكتب الإيميل الأول.','err');
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+  authMsg(error?error.message:'اتبعتلك لينك لتغيير كلمة السر.', error?'err':'ok');
+}
+async function signOut(){ try{ await sb.auth.signOut(); }catch(e){} location.reload(); }
+function startLocal(){ startFor(null); }
+
+async function startFor(user){
+  if(started) return; started=true; currentUser=user;
+  try{
+    let cfg=null;
+    if(user) cfg=await loadCloudCfg();
+    else { const o=LS.get('sea'); if(o){ try{cfg=JSON.parse(o);}catch(e){} } }
+    window.__BOOT={cfg};
+  }catch(e){
+    console.error(e); started=false; currentUser=null; showAuth();
+    return authMsg('ماقدرتش أحمّل إعداداتك من السيرفر ('+(e.message||e)+'). جرّب تاني.','err');
+  }
+  $a('#auth').hidden=true;
+  if(user){ const b=$a('#userBtn'); b.textContent='خروج ('+user.email+')'; b.hidden=false; }
+  else setCloud('⚠️ من غير حساب: الإعدادات محفوظة في المتصفح ده بس');
+  const s=document.createElement('script'); s.textContent=$a('#main-src').textContent; document.body.appendChild(s);
+}
+
+// ---------- السجل ----------
+let acc={sum:0,n:0,t0:Date.now()};
+function trackReading(s){
+  if(!sb||!currentUser||typeof s.p!=='number') return;
+  acc.sum+=s.p; acc.n++;
+  if(Date.now()-acc.t0>=300000 && acc.n>0){
+    const row={watts:Math.round(acc.sum/acc.n*10)/10, kwh:typeof s.kwh==='number'?s.kwh:null};
+    acc={sum:0,n:0,t0:Date.now()};
+    sb.from('readings').insert(row).then(({error})=>{ if(error) console.error(error); else loadHistory(); });
+  }
+}
+async function loadHistory(){
+  const card=$a('#histCard');
+  if(!sb||!currentUser){ card.hidden=true; return; }
+  card.hidden=false;
+  const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'Africa/Cairo';
+  const {data,error}=await sb.rpc('daily_usage',{days:14,tz});
+  if(error){ $a('#histInfo').textContent='ماقدرتش أجيب السجل: '+error.message; return; }
+  const map={}; (data||[]).forEach(r=>map[r.day]=r.kwh);
+  const days=[]; for(let i=13;i>=0;i--){ const k=new Date(Date.now()-i*864e5).toLocaleDateString('en-CA'); days.push({k,v:map[k]||0}); }
+  const c=$a('#hist'),g=c.getContext('2d'),W=c.width,H=c.height; g.clearRect(0,0,W,H);
+  const max=Math.max(1,...days.map(d=>d.v)), bw=W/days.length;
+  g.font='12px Tahoma'; g.textAlign='center';
+  days.forEach((d,i)=>{
+    const h=d.v/max*(H-40), x=i*bw+bw*0.15, w=bw*0.7;
+    g.fillStyle='#38bdf8'; g.fillRect(x,H-22-h,w,h);
+    g.fillStyle='#94a3b8'; g.fillText(d.v>0?d.v.toFixed(1):'',x+w/2,H-26-h);
+    g.fillText(d.k.slice(8),x+w/2,H-6);
+  });
+  const tot=days.reduce((a,d)=>a+d.v,0), act=days.filter(d=>d.v>0).length;
+  $a('#histInfo').textContent = act ? `المجموع المسجّل ${tot.toFixed(1)} kWh · متوسط ${(tot/act).toFixed(1)} kWh/يوم (الأيام اللي فيها تسجيل). الأرقام من القراءات اللي اتسجلت والتطبيق مفتوح بس.` : 'لسه مفيش قراءات متسجلة — هتظهر بعد أول 5 دقايق اتصال بالجهاز.';
+}
+
+// ---------- البداية ----------
+(async()=>{
+  if(!sb){ authMsg('Supabase لسه مش مربوط. تقدر تجرّب بدون حساب، أو حط الرابط والمفتاح في أول سكريبت بالملف.','err'); showAuth(); }
+  else{
+    sb.auth.onAuthStateChange((ev,sess)=>{
+      if(ev==='PASSWORD_RECOVERY'){ const p=prompt('اكتب كلمة السر الجديدة (8 حروف على الأقل):'); if(p&&p.length>=8) sb.auth.updateUser({password:p}).then(({error})=>alert(error?error.message:'اتغيّرت كلمة السر.')); }
+      if(ev==='SIGNED_IN' && sess && !started) startFor(sess.user);
+    });
+    const {data:{session}}=await sb.auth.getSession();
+    if(session) startFor(session.user); else showAuth();
+  }
+})();
 </script>
 </body>
 </html>
