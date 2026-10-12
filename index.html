@@ -105,7 +105,7 @@ canvas{width:100%;height:120px;background:#0b1220;border-radius:8px}
 
 <div class="card" id="histCard" hidden><h2>📈 السجل المحفوظ (آخر 14 يوم)</h2>
   <canvas id="hist" width="900" height="160"></canvas>
-  <div class="mut" id="histInfo" style="margin-top:6px">بنسجّل قراءة كل 5 دقايق وانت فاتح التطبيق.</div>
+  <div class="mut" id="histInfo" style="margin-top:6px">السيرفر بيسجّل قراءات جهازك كل 5 دقايق حتى لو التطبيق مقفول.</div>
 </div>
 
 <div class="card"><h2>🌡️ الجو والحرارة (بيحدّدوا شغل التكييف والسخان والغسالة)</h2>
@@ -765,36 +765,37 @@ async function startFor(user){
 }
 
 // ---------- السجل ----------
-let acc={sum:0,n:0,t0:Date.now()};
-function trackReading(s){
-  if(!sb||!currentUser||typeof s.p!=='number') return;
-  acc.sum+=s.p; acc.n++;
-  if(Date.now()-acc.t0>=300000 && acc.n>0){
-    const row={watts:Math.round(acc.sum/acc.n*10)/10, kwh:typeof s.kwh==='number'?s.kwh:null};
-    acc={sum:0,n:0,t0:Date.now()};
-    sb.from('readings').insert(row).then(({error})=>{ if(error) console.error(error); else loadHistory(); });
-  }
-}
+function trackReading(){}   // التسجيل بقى على السيرفر (Recorder) مش من المتصفح
+let histTimer=null;
 async function loadHistory(){
   const card=$a('#histCard');
   if(!sb||!currentUser){ card.hidden=true; return; }
   card.hidden=false;
+  if(!histTimer) histTimer=setInterval(loadHistory,300000);
   const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'Africa/Cairo';
-  const {data,error}=await sb.rpc('daily_usage',{days:14,tz});
-  if(error){ $a('#histInfo').textContent='ماقدرتش أجيب السجل: '+error.message; return; }
-  const map={}; (data||[]).forEach(r=>map[r.day]=r.kwh);
+  const [h,l]=await Promise.all([
+    sb.rpc('daily_usage',{days:14,tz}),
+    sb.from('readings').select('ts').order('ts',{ascending:false}).limit(1)
+  ]);
+  if(h.error){ $a('#histInfo').textContent='ماقدرتش أجيب السجل: '+h.error.message; return; }
+  const map={}; (h.data||[]).forEach(r=>map[r.day]=r.kwh);
   const days=[]; for(let i=13;i>=0;i--){ const k=new Date(Date.now()-i*864e5).toLocaleDateString('en-CA'); days.push({k,v:map[k]||0}); }
   const c=$a('#hist'),g=c.getContext('2d'),W=c.width,H=c.height; g.clearRect(0,0,W,H);
   const max=Math.max(1,...days.map(d=>d.v)), bw=W/days.length;
   g.font='12px Tahoma'; g.textAlign='center';
   days.forEach((d,i)=>{
-    const h=d.v/max*(H-40), x=i*bw+bw*0.15, w=bw*0.7;
-    g.fillStyle='#38bdf8'; g.fillRect(x,H-22-h,w,h);
-    g.fillStyle='#94a3b8'; g.fillText(d.v>0?d.v.toFixed(1):'',x+w/2,H-26-h);
+    const hh=d.v/max*(H-40), x=i*bw+bw*0.15, w=bw*0.7;
+    g.fillStyle='#38bdf8'; g.fillRect(x,H-22-hh,w,hh);
+    g.fillStyle='#94a3b8'; g.fillText(d.v>0?d.v.toFixed(1):'',x+w/2,H-26-hh);
     g.fillText(d.k.slice(8),x+w/2,H-6);
   });
   const tot=days.reduce((a,d)=>a+d.v,0), act=days.filter(d=>d.v>0).length;
-  $a('#histInfo').textContent = act ? `المجموع المسجّل ${tot.toFixed(1)} kWh · متوسط ${(tot/act).toFixed(1)} kWh/يوم (الأيام اللي فيها تسجيل). الأرقام من القراءات اللي اتسجلت والتطبيق مفتوح بس.` : 'لسه مفيش قراءات متسجلة — هتظهر بعد أول 5 دقايق اتصال بالجهاز.';
+  let last='';
+  if(l.data&&l.data[0]){ const m=Math.round((Date.now()-new Date(l.data[0].ts))/60000);
+    last=' · آخر قراءة اتسجلت من السيرفر: '+(m<1?'دلوقتي':m<90?'من '+m+' دقيقة':'من '+(m/60).toFixed(1)+' ساعة'); }
+  $a('#histInfo').textContent = act
+    ? `المجموع ${tot.toFixed(1)} kWh · متوسط ${(tot/act).toFixed(1)} kWh/يوم (الأيام اللي فيها تسجيل)${last}. التسجيل تلقائي حتى لو التطبيق مقفول.`
+    : 'لسه مفيش قراءات متسجلة. السيرفر بيسجّل لوحده حتى والتطبيق مقفول؛ لو الجهاز شغال وماظهرتش قراءة بعد 10 دقايق، راجع إن خدمة التسجيل شغالة وإن كود الجهاز مطابق.';
 }
 
 // ---------- البداية ----------
