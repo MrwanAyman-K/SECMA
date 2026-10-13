@@ -222,6 +222,8 @@ canvas{width:100%;height:120px;background:#0a1020;border-radius:10px}
 
 <div class="card" id="top"><h2>💡 نصائح دلوقتي</h2><div id="topAdvice" class="mut">في انتظار البيانات…</div></div>
 
+<div class="card" id="saveCard"><h2>💰 اقتراحات التوفير (من استهلاك أجهزتك الفعلي)</h2><div id="saveAdvice" class="mut">في انتظار البيانات…</div></div>
+
 <div class="card" id="testPanel" hidden style="border:1px dashed var(--warn)"><h2>🧪 وضع الاختبار (بيانات تجريبية من غير جهاز)</h2>
   <div class="mut" style="margin-bottom:8px">بيحقن حالات جاهزة ويتأكد إن النصائح والأرقام صح. الإعدادات بترجع زي ما كانت بعد كل حالة.</div>
   <div class="row"><button onclick="runAllScenarios()">▶ شغّل كل الاختبارات</button>
@@ -329,6 +331,39 @@ function fmtHours(h){
   if(h<48) return h.toFixed(1)+' ساعة';
   return (h/24).toFixed(1)+' يوم';
 }
+// ---------- اقتراحات التوفير ----------
+const SAVE = {AC_MAX_SET:27, AC_STEP:2, HEATER_MIN_SET:45, HEATER_STEP:5, WASH_MIN:30, WASH_STEP:10, WASH_HEAT_SHARE:0.8};
+// أصغر تعديل عملي في الإعداد + نسبة التوفير المتوقعة منه (من نفس النموذج الحراري)
+function savingStep(kind,P){
+  if(kind==='ac'){                                   // رفع الحرارة المظبوطة: d = UA·(الجو − المظبوطة) ÷ (COP·القدرة)
+    if(!(P.set<SAVE.AC_MAX_SET)) return null;
+    const ns=Math.min(SAVE.AC_MAX_SET,P.set+SAVE.AC_STEP);
+    const d0=acSteadyDuty(P.out,P.set,P.area,P.w), d1=acSteadyDuty(P.out,ns,P.area,P.w);
+    if(!(d0>0.02)||!(d1<d0)) return null;
+    return {newSet:ns, frac:clampN(1-d1/d0,0,1), dir:'up'};
+  }
+  if(kind==='heater'){                               // طاقة التسخينة ∝ (المظبوطة − حرارة مية الدخول)
+    const dT=P.set-P.inlet, ns=Math.max(SAVE.HEATER_MIN_SET,P.set-SAVE.HEATER_STEP);
+    if(!(dT>0)||!(ns<P.set)) return null;
+    return {newSet:ns, frac:clampN((P.set-ns)/dT,0,1), dir:'down'};
+  }
+  if(kind==='washer'){                               // تسخين المية هو الجزء الأكبر من طاقة الغسلة (تقدير)
+    const dT=P.set-P.inlet, ns=Math.max(SAVE.WASH_MIN,P.set-SAVE.WASH_STEP);
+    if(!(dT>0)||!(ns<P.set)) return null;
+    return {newSet:ns, frac:clampN(SAVE.WASH_HEAT_SHARE*(P.set-ns)/dT,0,1), dir:'down'};
+  }
+  return null;
+}
+// devRate = استهلاك الجهاز kWh/يوم بنفس الرتم الحالي (أو null لو لسه مفيش قياس كفاية)
+function savingsPlan(kind,P,devRate,daysLeft,proj,cap,tiers){
+  const st=savingStep(kind,P); if(!st) return null;
+  const o={...st, pct:Math.round(st.frac*100), saveDay:null, saveCycle:null, proj2:null, t1:null, t2:null, underCap:false};
+  if(devRate!=null && devRate>0){
+    o.saveDay=devRate*st.frac; o.saveCycle=o.saveDay*Math.max(0,daysLeft);
+    if(proj!=null){ o.proj2=Math.max(0,proj-o.saveCycle); o.t1=tierOf(proj,tiers).n; o.t2=tierOf(o.proj2,tiers).n; o.underCap=proj>cap && o.proj2<=cap; }
+  }
+  return o;
+}
 // </logic>
 </script>
 <script id="selftest">
@@ -385,6 +420,23 @@ function runLogicTests(){
   T('حكم غسالة: تسخين 600ث (المتوقع 666) → طبيعي', judgeThermal('washer',{on:1,ses:1,mode:1,ms:600},Ew).state==='normal');
   T('حكم غسالة: تسخين 1500ث → أعلى من الطبيعي', judgeThermal('washer',{on:1,ses:1,mode:1,ms:1500},Ew).state==='high');
   T('حكم غسالة: مرحلة الغسيل → طبيعي', judgeThermal('washer',{on:1,ses:1,mode:2,ms:1700},Ew).state==='normal');
+  // ---- اقتراحات التوفير ----
+  const SP={out:38,inlet:20,set:24,area:20,w:1325,val:50};
+  const sa=savingStep('ac',SP);
+  T('توفير تكييف: رفع من 24 لـ 26', sa&&sa.newSet===26&&sa.dir==='up');
+  T('توفير تكييف: النسبة بتتحسب من نسبة الاستقرار (≈14%)', sa&&near(sa.frac,1-acSteadyDuty(38,26,20,1325)/acSteadyDuty(38,24,20,1325),1e-9)&&sa.frac>0.10&&sa.frac<0.20, sa&&sa.frac.toFixed(3));
+  T('توفير تكييف: على 27 أو أكتر → مفيش اقتراح', savingStep('ac',{...SP,set:27})===null && savingStep('ac',{...SP,set:28})===null);
+  T('توفير تكييف: الجو أبرد من المظبوطة → مفيش اقتراح', savingStep('ac',{...SP,out:22})===null);
+  T('توفير سخان: من 55 لـ 50 والتوفير 5/35 = 14%', (()=>{ const x=savingStep('heater',{...SP,set:55}); return x&&x.newSet===50&&near(x.frac,5/35,1e-9)&&x.dir==='down'; })());
+  T('توفير سخان: مش بينزل تحت 45', savingStep('heater',{...SP,set:47}).newSet===45 && savingStep('heater',{...SP,set:45})===null);
+  T('توفير غسالة: من 40 لـ 30 (تقدير 80% من الطاقة تسخين)', (()=>{ const x=savingStep('washer',{...SP,set:40}); return x&&x.newSet===30&&near(x.frac,0.8*10/20,1e-9); })());
+  T('توفير: تلفزيون → مفيش نموذج', savingStep('tv',SP)===null);
+  const pl=savingsPlan('ac',SP,7.2,10,330,350,TIERS_DEFAULT);
+  T('خطة التوفير: kWh/يوم × الأيام الباقية', pl&&near(pl.saveCycle,pl.saveDay*10,1e-9)&&near(pl.saveDay,7.2*pl.frac,1e-9));
+  T('خطة التوفير: توقع جديد = القديم − التوفير', pl&&near(pl.proj2,330-pl.saveCycle,1e-9));
+  T('خطة التوفير: نزل شريحة لو التوفير عدّى الحد (مثال: 205 → ≤200)', (()=>{ const x=savingsPlan('heater',{...SP,set:55},10,10,205,350,TIERS_DEFAULT); return x&&x.t1===4&&x.t2===3; })());
+  T('خطة التوفير: من فوق الحد لتحته → underCap', (()=>{ const x=savingsPlan('ac',SP,20,10,360,350,TIERS_DEFAULT); return x&&x.proj2<=350&&x.underCap; })());
+  T('خطة التوفير: من غير قياس → نسبة بس من غير kWh', (()=>{ const x=savingsPlan('ac',SP,null,10,300,350,TIERS_DEFAULT); return x&&x.pct>0&&x.saveCycle===null; })());
   return R;
 }
 </script>
@@ -454,6 +506,7 @@ DEVS.forEach(d=>{
     <div class="mut" id="th-${d.id}" style="margin-top:6px"></div>
     <div id="a-${d.id}"></div>
     <div class="mut" id="e-${d.id}" style="margin-top:6px"></div>
+    <div id="sv-${d.id}"></div>
   </div>`);
   $('#on-'+d.id).checked = cfg.devs[d.id].on;
   $('#v-'+d.id).value = cfg.devs[d.id].val;
@@ -595,20 +648,24 @@ function thermalLine(k,J,P){
 }
 // ينفع يشتغل قد إيه ويفضل في الشريحة؟ (تكييف وسخان)
 function enduranceHTML(d,s,f){
-  const k=KIND[d.id]; if((k!=='ac'&&k!=='heater')||!cfg.devs[d.id].on) return '';
+  const k=KIND[d.id]; if(!['ac','heater','washer','tv'].includes(k)||!cfg.devs[d.id].on) return '';
   const P=devParams(d), E=expectedFor(k,P), used=s.kwh, tiers=cfg.tiers;
-  const avgKW = k==='ac' ? P.w*E.steady/1000 : P.w/1000;       // متوسط السحب في الاستقرار = P_rated × d
+  const heatKind = k==='heater'||k==='washer';
+  const avgKW = k==='ac' ? P.w*E.steady/1000 : P.w/1000;       // متوسط السحب: تكييف = P_rated × d ، والباقي = قدرته وهو شغال
   const en=endurance(used,tiers,avgKW); if(!en) return '';
   if(k==='ac'){                                                  // الساعات من منحنى الغرفة (أول التشغيل أعلى من الاستقرار)
     en.hoursLeft = acHoursForEnergy(E.profile,P.w,en.leftKWh);
     en.hoursNext = en.nextSpanKWh==null ? null : acHoursForEnergy(E.profile,P.w,en.leftKWh+en.nextSpanKWh)-en.hoursLeft;
   }
   const t=en.tier, rng=x=>`${x.start?x.start+1:0}–${x.end===Infinity?'∞':x.end}`;
-  const kwhPerHeat = k==='heater' ? P.w/1000*E.heatSec/3600 : 0;
-  const unit = h => k==='heater' && kwhPerHeat>0 ? `${Math.floor(h*avgKW/kwhPerHeat)} مرة تسخين` : fmtHours(h);
+  const kwhPerHeat = heatKind ? P.w/1000*E.heatSec/3600 : 0;
+  const heatOK = heatKind && kwhPerHeat>0;
+  const unitWord = k==='heater' ? 'مرة تسخين' : 'غسلة (تسخين المية بس)';
+  const unit = h => heatOK ? `${Math.floor(h*avgKW/kwhPerHeat)} ${unitWord}` : fmtHours(h);
   let o = `<b>⏱ ينفع يشتغل قد إيه؟</b> `;
   o += k==='ac' ? `متوسط سحبه ≈ ${Math.round(avgKW*1000)} W (نسبة تشغيل الاستقرار ${Math.round(E.steady*100)}% × ${Math.round(P.w)} W، غرفة ${P.area} م²، فرق حرارة ${(P.out-P.set).toFixed(0)}°م)`
-                : `كل تسخينة ≈ ${kwhPerHeat.toFixed(2)} kWh وبتاخد ${minTxt(E.heatSec)}`;
+     : k==='tv' ? `سحبه ≈ ${Math.round(P.w)} W`
+     : `كل ${k==='heater'?'تسخينة':'غسلة'} ≈ ${kwhPerHeat.toFixed(2)} kWh وبتاخد ${minTxt(E.heatSec)}`;
   if(t.last) return o+`<div>أنت في آخر شريحة (أكتر من ${tiers[tiers.length-1]} kWh) وبأعلى سعر.</div>`;
   o += `<div>• في شريحتك الحالية (${t.n}: ${rng(t)} kWh): فاضل <b>${en.leftKWh.toFixed(1)}</b> kWh = <b>${unit(en.hoursLeft)}</b> قبل ما تعدّيها.</div>`;
   if(en.nextSpanKWh!=null) o += `<div>• لو عدّيتها، الشريحة ${t.n+1} (${rng({start:t.end,end:t.nextEnd})} kWh) ${isFinite(en.nextSpanKWh)?`فيها ${en.nextSpanKWh} kWh = ${unit(en.hoursNext)} كمان`:'مفتوحة من غير حد'}.</div>`;
@@ -616,11 +673,45 @@ function enduranceHTML(d,s,f){
   if(f.rate!=null && me && (s.msec||0)>=180){
     const devRate = me.kwh/((s.msec)/3600)*24, other=Math.max(0,f.rate-devRate);
     const h=dailyHours(en.leftKWh,Math.max(1,f.left),other,avgKW);
-    o += `<div>• عشان تفضل في الشريحة لحد آخر الدورة: ينفع ${k==='ac'?`<b>${fmtHours(h)}</b> في اليوم`:`<b>${Math.floor(h*avgKW/kwhPerHeat)}</b> تسخينة في اليوم`} (بعد خصم باقي استهلاك البيت ≈ ${other.toFixed(1)} kWh/يوم).</div>`;
+    const perDay = heatOK ? `<b>${Math.floor(h*avgKW/kwhPerHeat)}</b> ${k==='heater'?'تسخينة':'غسلة'} في اليوم` : `<b>${fmtHours(h)}</b> في اليوم`;
+    o += `<div>• عشان تفضل في الشريحة لحد آخر الدورة: ينفع ${perDay} (بعد خصم باقي استهلاك البيت ≈ ${other.toFixed(1)} kWh/يوم).</div>`;
   }
   return o;
 }
-
+// ---------- اقتراحات التوفير (واجهة + إشعارات) ----------
+function savingsLine(d,P,plan){
+  const verb = plan.dir==='up' ? 'ترفع الحرارة المظبوطة' : 'تخفض الحرارة';
+  let t=`💰 <b>توفير:</b> الحرارة دلوقتي ${P.set}°م. لو ${verb} لـ <b>${plan.newSet}°م</b> استهلاك ${d.name} هيقل حوالي <b>${plan.pct}%</b>`;
+  if(plan.saveCycle!=null){
+    t+=` (≈ <b>${plan.saveDay.toFixed(2)}</b> kWh/يوم، يعني <b>${plan.saveCycle.toFixed(1)}</b> kWh لحد آخر الدورة)`;
+    if(plan.t1!=null){
+      if(plan.t2<plan.t1) t+=` — وده ينزّلك للشريحة <b>${plan.t2}</b> بدل ${plan.t1}`;
+      else if(plan.underCap) t+=` — وده يخليك <b>تحت حد الشريحة</b>`;
+      else t+=` — وتفضل في الشريحة ${plan.t1}`;
+    }
+  } else t+=` (محتاج وقت قياس أكتر عشان أحسب الكيلووات)`;
+  return t+`. <span class="mut">تقدير من النموذج الحراري.</span>`;
+}
+const savNotified={};
+function maybeNotifySavings(d,html,plan){
+  if(window.__snap||!plan||plan.saveCycle==null||plan.saveCycle<1) return;        // إشعار بس لو التوفير ملموس (≥ 1 kWh)
+  const key='sea-sv-'+d.id+'-'+plan.newSet, now=Date.now();
+  const last=savNotified[key]||(typeof LS!=='undefined'?+LS.get(key):0)||0;
+  if(now-last<6*3600e3) return;                                                      // مرة كل 6 ساعات لكل اقتراح
+  savNotified[key]=now; if(typeof LS!=='undefined') LS.set(key,String(now));
+  notify('💰 توفير: '+d.name, html.replace(/<[^>]+>/g,''));
+}
+function renderSavings(list,f,cap){
+  const el=$('#saveAdvice'); if(!el) return;
+  if(!list.length){ el.innerHTML='<span class="mut">مفيش اقتراحات توفير دلوقتي: الأجهزة لسه ما اشتغلتش، أو إعداداتها أصلاً في الحدود الموفّرة.</span>'; return; }
+  let tot=0, any=false;
+  let html=list.map(x=>{ if(x.plan.saveCycle!=null){ tot+=x.plan.saveCycle; any=true; } return `<div class="advice ok">${x.d.icon} ${x.line}</div>`; }).join('');
+  if(any && f.proj!=null){
+    const p2=Math.max(0,f.proj-tot), a=tierOf(f.proj,cfg.tiers).n, b=tierOf(p2,cfg.tiers).n;
+    html+=`<div class="advice" style="margin-top:10px">📉 <b>لو طبّقت كل الاقتراحات:</b> توفر ≈ <b>${tot.toFixed(1)}</b> kWh لآخر الدورة، والمتوقع يبقى ≈ <b>${p2.toFixed(0)}</b> kWh بدل ${f.proj.toFixed(0)} — ${b<a?`يعني تنزل للشريحة <b>${b}</b> بدل ${a}`:(f.proj>cap&&p2<=cap?'يعني تبقى <b>تحت حد الشريحة</b>':`وتفضل في الشريحة ${a}`)}.</div>`;
+  }
+  el.innerHTML=html;
+}
 // ---------- البارات ----------
 const TIER_COLORS=['#22c55e','#84cc16','#eab308','#f59e0b','#f97316','#ef4444','#b91c1c'];
 function barColor(p){ return p>90?'var(--bad)':p>75?'var(--warn)':'var(--ok)'; }
@@ -680,6 +771,7 @@ function render(s){
   else top.push({lvl:'warn',t:'ℹ️ اضغط "ضبط استهلاك الدورة الحالي" وادخل قراءتك علشان التوقع يبقى دقيق.'});
   if(s.unk) top.push({lvl:'warn',t:'في حمل كبير مش متعرّف عليه. راجع الأجهزة المفعّلة، أو ضيف أجهزة الـ 24 ساعة اللي ناقصة.'});
 
+  const savList=[];
   s.dev.forEach(x=>{
     const d=DEVS.find(q=>q.id===x.id); if(!d) return;     // أجهزة الـ 24 ساعة بتتعرض في التوزيع
     const c=$('#c-'+x.id), active=!!(x.on||x.ses), k=KIND[d.id];
@@ -708,7 +800,17 @@ function render(s){
       if((tip.lvl==='bad'||(tip.lvl==='warn'&&k!=='tv')) && !notified[x.id]){ notified[x.id]=1; notify(d.name,tip.t); }
     } else { a.innerHTML=''; c.classList.remove('warn'); notified[x.id]=0; }
     $('#e-'+x.id).innerHTML = enduranceHTML(d,s,f);
+    { // اقتراح التوفير للجهاز (تكييف / سخان / غسالة)
+      let svh='';
+      if(cfg.devs[d.id].on && ['ac','heater','washer'].includes(k) && (active || (x.kwh||0)>0)){
+        const P=devParams(d), devRate=(s.msec||0)>=180 ? (x.kwh||0)/(s.msec/3600)*24 : null;
+        const plan=savingsPlan(k,P,devRate,f.left,f.proj,cap,cfg.tiers);
+        if(plan){ const line=savingsLine(d,P,plan); svh=`<div class="advice ok">${line}</div>`; savList.push({d,plan,line}); if(active) maybeNotifySavings(d,line,plan); }
+      }
+      $('#sv-'+x.id).innerHTML=svh;
+    }
   });
+  renderSavings(savList,f,cap);
   const tr=s.trim||0;
   $('#alwaysInfo').dataset.live = '';
   if(typeof s.base==='number') $('#alwaysInfo').innerHTML = $('#alwaysInfo').innerHTML.replace(/<div id="live">.*?<\/div>/,'') +
@@ -770,7 +872,17 @@ const SCEN=[
  {n:'فوق 1000 kWh → آخر شريحة', st:()=>mkState(1200,{}),
   chk:q=>[['آخر شريحة',q.end('ac1').includes('آخر شريحة')]]},
  {n:'التلفزيون لسه بياخد نصيحته', st:()=>mkState(180,{tv:{on:1,mode:1,ses:1,sec:600,run:600,w:100}}),
-  chk:q=>[['نصيحة التلفزيون',q.top.includes('تلفزيون')]]},
+  chk:q=>[['نصيحة التلفزيون',q.top.includes('تلفزيون')]]},,
+ {n:'توفير: تكييف على 24° شغال → اقتراح رفع لـ 26 بالكيلووات', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
+  chk:q=>[['اقتراح توفير للتكييف',q.sv('ac1').includes('توفير')&&q.sv('ac1').includes('26')],['اتحسب بالكيلووات',/kWh\/يوم/.test(q.sv('ac1'))],['ظهر في كارت التوفير',q.save.includes('تكييف 1')&&q.save.includes('لو طبّقت كل الاقتراحات')]]},
+ {n:'توفير: تكييف على 27° → مفيش اقتراح', cfg:{set:{ac1:27}}, st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
+  chk:q=>[['مفيش اقتراح',q.sv('ac1')==='']]},
+ {n:'توفير: سخان على 55° → اقتراح خفض لـ 50', st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:3000,run:3000,rm:3000,ms:3000,kwh:2}}),
+  chk:q=>[['اقتراح خفض لـ 50',q.sv('heater1').includes('50')&&q.sv('heater1').includes('تخفض')]]},
+ {n:'توفير: جهاز مش شغال ولا استهلك → مفيش اقتراح', st:()=>mkState(180,{}),
+  chk:q=>[['مفيش اقتراح للتكييف',q.sv('ac1')==='']]},
+ {n:'كل الأجهزة: التلفزيون والغسالة ليهم خطة تشغيل لكل شريحة', st:()=>mkState(180,{tv:{on:1,mode:1,ses:1,sec:600,run:600,kwh:0.1},washer:{on:1,mode:1,ses:1,sec:600,run:600,rm:600,ms:600,kwh:0.2}}),
+  chk:q=>[['التلفزيون',q.end('tv').includes('ساعة')||q.end('tv').includes('دقيقة')],['الغسالة',q.end('washer').includes('غسلة')]]}
 ];
 function runScenario(sc){
   const backup=JSON.stringify(cfg), nb=JSON.stringify(notified), res=[];
@@ -780,7 +892,7 @@ function runScenario(sc){
     Object.keys(BASECFG.set).forEach(id=>{cfg.devs[id].set=(sc.cfg&&sc.cfg.set&&sc.cfg.set[id]!=null)?sc.cfg.set[id]:BASECFG.set[id]; cfg.devs[id].val=BASECFG.val[id]; cfg.devs[id].on=true;});
     cfg.tiers=TIERS_DEFAULT.slice();
     render(sc.st());
-    const q={top:$('#topAdvice').textContent, th:id=>$('#th-'+id).textContent, adv:id=>$('#a-'+id).textContent, end:id=>$('#e-'+id).textContent};
+    const q={top:$('#topAdvice').textContent, th:id=>$('#th-'+id).textContent, adv:id=>$('#a-'+id).textContent, end:id=>$('#e-'+id).textContent, sv:id=>$('#sv-'+id).textContent, save:$('#saveAdvice').textContent};
     sc.chk(q).forEach(([d,ok])=>res.push({name:sc.n+' ← '+d,ok}));
   }catch(e){ res.push({name:sc.n+' ← خطأ: '+e.message,ok:false}); }
   cfg=JSON.parse(backup); notified=JSON.parse(nb);
@@ -788,7 +900,8 @@ function runScenario(sc){
 }
 function runAllScenarios(){
   let all=runLogicTests().map(r=>({name:'[منطق] '+r.name,ok:r.ok,detail:r.detail}));
-  SCEN.forEach(sc=>all=all.concat(runScenario(sc)));
+  window.__snap=true;   // وضع الاختبار ما يبعتش إشعارات ولا يلوّث المخطط الحي
+  try{ SCEN.forEach(sc=>all=all.concat(runScenario(sc))); } finally{ window.__snap=false; }
   const bad=all.filter(r=>!r.ok);
   $('#testOut').innerHTML=`<div class="advice ${bad.length?'bad':''}" style="font-size:16px"><b>${all.length-bad.length} / ${all.length} نجح</b>${bad.length?' — فيه '+bad.length+' فشل':''}</div>`+
     all.map(r=>`<div style="margin:3px 0;color:${r.ok?'var(--ok)':'var(--bad)'}">${r.ok?'✅':'❌'} ${r.name} <span class="mut">${r.detail||''}</span></div>`).join('');
