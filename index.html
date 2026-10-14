@@ -4,88 +4,92 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>مستشار الطاقة الذكي</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('sea-theme')||'mint'}catch(e){}</script>
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
-:root{--bg:#0b1120;--card:#15203a;--card2:#1a2646;--line:#2b3a5a;--tx:#e8eefc;--mut:#8fa1c0;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--acc:#38bdf8;--acc2:#818cf8;--r:16px}
+:root,[data-theme=mint]{--bg:#f3fbf3;--card:#fff;--card2:#f8fdf7;--soft:#ecf7e9;--line:#d5ead0;--tx:#173321;--mut:#5d7a64;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--acc:#4ade80;--acc2:#a3e635;--accd:#15803d;--onacc:#0b2a14;--glow:#d9f5d0;--sh:0 4px 16px rgba(22,101,52,.08);--r:16px}
+[data-theme=lime]{--bg:#fbfdee;--card:#fff;--card2:#fdfef6;--soft:#f4f9d8;--line:#e2edb0;--tx:#273208;--mut:#6c7d35;--acc:#d9f99d;--acc2:#a3e635;--accd:#4d7c0f;--onacc:#1c2705;--glow:#effab8}
+[data-theme=white]{--bg:#f6f7f9;--card:#fff;--card2:#fff;--soft:#f1f3f5;--line:#e4e7ec;--tx:#101828;--mut:#667085;--acc:#6ee7b7;--acc2:#bef264;--accd:#047857;--onacc:#06281b;--glow:#e8f7ee}
+[data-theme=dark]{--bg:#0b1120;--card:#15203a;--card2:#1a2646;--soft:#0a1020;--line:#2b3a5a;--tx:#e8eefc;--mut:#8fa1c0;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--acc:#38bdf8;--acc2:#818cf8;--accd:#38bdf8;--onacc:#04202e;--glow:#1d2b57;--sh:0 6px 20px rgba(0,0,0,.3)}
 *{box-sizing:border-box}
 body{margin:0;color:var(--tx);font-family:"Segoe UI",Tahoma,Arial,sans-serif;line-height:1.55;padding:0 14px 32px;max-width:1000px;margin-inline:auto;
-  background:radial-gradient(900px 500px at 85% -10%,#1d2b57 0%,transparent 60%),var(--bg);background-attachment:fixed}
+  background:radial-gradient(900px 500px at 85% -10%,var(--glow) 0%,transparent 60%),var(--bg);background-attachment:fixed}
 h1{font-size:19px;margin:0}h2{font-size:15px;margin:0 0 12px;color:var(--mut);font-weight:600}
-.card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.card,.tile{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--sh)}
+.tile{margin:0;padding:14px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
-.mut{color:var(--mut);font-size:13px}
-.lbl{color:var(--mut);font-size:13px}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--bad);display:inline-block;box-shadow:0 0 0 3px rgba(239,68,68,.2)}
-.dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(34,197,94,.25)}
-/* header */
-.top{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 -14px 14px;padding:12px 14px;background:rgba(11,17,32,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.mut,.lbl{color:var(--mut);font-size:13px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--bad);display:inline-block;box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 20%,transparent)}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+.top{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 -14px 14px;padding:12px 14px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px}
-.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:22px;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#04202e}
+.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:22px;background:linear-gradient(135deg,var(--acc),var(--acc2));color:var(--onacc)}
 .status{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:2px}
-.status .sep{opacity:.5}.cloud{color:var(--mut)}
-.actions{display:flex;gap:8px;flex-wrap:wrap}
-.banner{background:#172554;border:1px solid #1d4ed8;color:#bfdbfe;border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px}
-/* controls */
-input,button{font:inherit;background:#0b1220;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:7px 11px}
-input:focus{outline:2px solid var(--acc);outline-offset:1px}
+.banner{background:var(--soft);border:1px solid var(--line);color:var(--tx);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+input,select,button{font:inherit;background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:7px 11px}
+input:focus,select:focus{outline:2px solid var(--accd);outline-offset:1px}
 input[type=number]{width:90px}
-button{cursor:pointer;background:linear-gradient(135deg,var(--acc),#60a5fa);color:#04202e;border:0;font-weight:700}
+input[type=checkbox]{width:auto}
+button{cursor:pointer;background:linear-gradient(135deg,var(--acc),var(--acc2));color:var(--onacc);border:0;font-weight:700}
 button:active{transform:translateY(1px)}
-button.sec{background:#0b1220;color:var(--tx);border:1px solid var(--line);font-weight:600}
-#settings label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)}
-#settings .row{align-items:flex-end}
-/* bars */
-.bar{height:12px;background:#0a1020;border-radius:99px;overflow:hidden;position:relative;border:1px solid #1e2b49}
+button.sec{background:var(--card);color:var(--tx);border:1px solid var(--line);font-weight:600}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)}
+label.switch{flex-direction:row;align-items:center;gap:6px}
+.bar{height:12px;background:var(--soft);border-radius:99px;overflow:hidden;position:relative;border:1px solid var(--line)}
 .bar>i{display:block;height:100%;width:0;background:var(--ok);border-radius:99px;transition:width .6s ease,background .3s}
 .bar.xl{height:24px}.bar.sm{height:8px}
-.bar .mark{position:absolute;top:-2px;bottom:-2px;width:2px;background:#e2e8f0;opacity:.8}
+.bar .mark{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--tx);opacity:.6}
 .bar-meta{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:6px}
-/* hero */
 .hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
-.hero-num{font-size:42px;font-weight:800;line-height:1.1;letter-spacing:-.5px}
+.hero-num{font-size:42px;font-weight:800;line-height:1.1}
 .hero-num .of{font-size:18px;font-weight:600;color:var(--mut)}
-.pill{padding:6px 14px;border-radius:99px;background:#0a1020;border:1px solid var(--line);font-weight:700;font-size:14px;white-space:nowrap}
+.pill{padding:6px 14px;border-radius:99px;background:var(--soft);border:1px solid var(--line);font-weight:700;font-size:14px;white-space:nowrap;color:var(--accd)}
 .hero-sub{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.hero-sub>div{background:#0a1020;border:1px solid #1e2b49;border-radius:12px;padding:10px 12px}
+.hero-sub>div{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .hero-sub .lbl{display:block}.hero-sub b{font-size:20px}
 .tiers{display:flex;gap:4px;margin-top:6px}
-.tiers .seg{flex:1;height:14px;background:#0a1020;border-radius:6px;overflow:hidden;position:relative;border:1px solid #1e2b49}
+.tiers .seg{flex:1;height:14px;background:var(--soft);border-radius:6px;overflow:hidden;position:relative;border:1px solid var(--line)}
 .tiers .seg>i{position:absolute;inset:0 auto 0 0;display:block}
 [dir=rtl] .tiers .seg>i{inset:0 0 0 auto}
-.tiers .seg.cur{outline:2px solid #e2e8f0;outline-offset:1px}
+.tiers .seg.cur{outline:2px solid var(--tx);outline-offset:1px}
 .tier-labels{display:flex;gap:4px;margin-top:4px}
 .tier-labels span{flex:1;text-align:center;font-size:11px;color:var(--mut)}
 .tier-labels span.cur{color:var(--tx);font-weight:700}
-/* tiles */
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:14px}
-.tile{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:var(--r);padding:14px;box-shadow:0 6px 20px rgba(0,0,0,.2)}
 .t-h{display:flex;gap:8px;align-items:center;color:var(--mut);font-size:13px;margin-bottom:6px}
 .t-v{font-size:30px;font-weight:800;line-height:1.1;margin-bottom:10px}
 .t-v small{font-size:13px;font-weight:600;color:var(--mut);margin-inline-start:6px}
 .t-s{font-size:12.5px;color:var(--mut);margin-top:8px}
-/* misc */
 .dev{border-inline-start:4px solid var(--line)}
 .dev.run{border-inline-start-color:var(--ok)}
 .dev.warn{border-inline-start-color:var(--warn)}
 .dbars{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
 .dbars .mut{margin-bottom:4px;font-size:12px}
-.badge{padding:3px 10px;border-radius:99px;font-size:12px;background:#0a1020;border:1px solid var(--line)}
-.badge.on{background:#14532d;color:#bbf7d0;border-color:#166534}
-.advice{margin-top:8px;padding:10px 12px;border-radius:10px;background:#0a1020;font-size:14px;line-height:1.7}
-.advice.warn{background:#451a03;color:#fde68a}.advice.bad{background:#450a0a;color:#fecaca}
-.switch{display:flex;align-items:center;gap:6px}
-canvas{width:100%;height:120px;background:#0a1020;border-radius:10px}
+.badge{padding:3px 10px;border-radius:99px;font-size:12px;background:var(--soft);border:1px solid var(--line)}
+.badge.on{background:color-mix(in srgb,var(--ok) 18%,var(--card));color:var(--accd);border-color:var(--ok)}
+.advice{margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--soft);font-size:14px;line-height:1.7}
+.advice.warn{background:color-mix(in srgb,var(--warn) 16%,var(--card))}
+.advice.bad{background:color-mix(in srgb,var(--bad) 14%,var(--card))}
+canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
 #top .advice{margin:6px 0 0}
+#settingsPage{position:fixed;inset:0;z-index:40;background:var(--bg);overflow:auto;padding:0 14px 40px}
+.sp-in{max-width:700px;margin:0 auto}
+.sp-head{display:flex;align-items:center;gap:12px;padding:14px 0;position:sticky;top:0;background:var(--bg);z-index:2}
+.sw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.sw{display:flex;gap:8px;align-items:center;justify-content:center;background:var(--card);color:var(--tx);border:2px solid var(--line)}
+.sw.on{border-color:var(--accd)}
+.sw i{width:18px;height:18px;border-radius:50%;border:1px solid var(--line)}
 #auth{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
 #auth .box{width:100%;max-width:380px}
 #auth input{width:100%;margin:6px 0}
 #auth .row button{flex:1}
 #authMsg{min-height:20px;font-size:14px;margin-top:8px;line-height:1.6}
-#authMsg.err{color:#fecaca}#authMsg.ok{color:#bbf7d0}
+#authMsg.err{color:var(--bad)}#authMsg.ok{color:var(--accd)}
 [hidden]{display:none!important}
-@media(max-width:520px){.hero-num{font-size:34px}.dbars,.hero-sub{grid-template-columns:1fr}.actions button{padding:6px 9px;font-size:13px}}
+@media(max-width:520px){.hero-num{font-size:34px}.dbars,.hero-sub{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -112,28 +116,11 @@ canvas{width:100%;height:120px;background:#0a1020;border-radius:10px}
   <div class="brand">
     <div class="logo">⚡</div>
     <div><h1>مستشار الطاقة الذكي</h1>
-      <div class="status"><span id="dot" class="dot"></span><span id="conn">غير متصل</span><span class="sep">·</span><span>الجهاز: <span id="devstat">--</span></span><span id="cloud" class="cloud"></span></div></div>
+      <div class="status"><span id="dot" class="dot"></span><span id="conn">غير متصل</span><span>·</span><span>الجهاز: <span id="devstat">--</span></span><span id="cloud"></span></div></div>
   </div>
-  <div class="actions">
-    <button class="sec" onclick="document.getElementById('settings').hidden^=1">⚙️ الإعدادات</button>
-    <button class="sec" onclick="askNotif()">🔔 الإشعارات</button>
-    <button class="sec" id="userBtn" onclick="signOut()" hidden></button>
-  </div>
+  <button class="sec" onclick="openSettings()">⚙️ الإعدادات</button>
 </header>
 <div id="snapBanner" class="banner" hidden></div>
-
-<div id="settings" class="card" hidden style="margin-top:10px">
-  <h2>الإعدادات العامة</h2>
-  <div class="row">
-    <label>كود جهازك (حطه في الفيرموير كـ SITE_ID) <input id="site" style="width:300px;max-width:100%"></label>
-    <label>حد الشريحة kWh <input id="cap" type="number"></label>
-    <label>بداية الدورة <input id="cycle" type="date"></label>
-    <label>أيام الدورة <input id="days" type="number" min="28" max="35"></label>
-    <label>حدود الشرايح kWh (بفاصلة) <input id="tiers" style="width:230px"></label>
-    <button onclick="saveSettings()">حفظ وإعادة الاتصال</button>
-    <button class="sec" onclick="resetCounter()">ضبط استهلاك الدورة الحالي</button>
-  </div>
-</div>
 
 <section class="card hero">
   <div class="hero-top">
@@ -159,7 +146,7 @@ canvas{width:100%;height:120px;background:#0a1020;border-radius:10px}
     <div class="t-h"><span>⚡</span>الاستهلاك اللحظي</div>
     <div class="t-v"><span id="pw">0</span><small>W</small></div>
     <div class="bar"><i id="pwbar"></i></div>
-    <div class="t-s">المقياس 0–<span id="pwmax">3000</span> W · معامل القدرة <span id="pf">--</span> · <span id="vi">--</span></div>
+    <div class="t-s">المقياس 0–<span id="pwmax">3000</span> W</div>
   </div>
   <div class="tile">
     <div class="t-h"><span>📅</span>الدورة</div>
@@ -172,7 +159,6 @@ canvas{width:100%;height:120px;background:#0a1020;border-radius:10px}
     <div class="t-v"><span id="proj">--</span><small>kWh من <span id="capv2">--</span></small></div>
     <div class="bar"><i id="projbar"></i></div>
     <div class="t-s">هتوصل للحد: <b id="capdate">--</b></div>
-    <div class="t-s" id="acc" style="margin-top:2px"></div>
   </div>
   <div class="tile">
     <div class="t-h"><span>📈</span>المعدل اليومي</div>
@@ -191,45 +177,67 @@ canvas{width:100%;height:120px;background:#0a1020;border-radius:10px}
   <div class="mut" id="histInfo" style="margin-top:6px">السيرفر بيسجّل قراءات جهازك بشكل دوري حتى لو التطبيق مقفول.</div>
 </div>
 
-<div class="card"><h2>🌡️ الجو والحرارة (بيحدّدوا شغل التكييف والسخان والغسالة)</h2>
-  <div class="row">
-    <label>حرارة الجو بره °م <input id="tout" type="number" step="0.5" style="width:80px"></label>
-    <label>حرارة مية الدخول °م <input id="tin" type="number" step="0.5" style="width:80px"></label>
-    <label>حرارة الغرفة لحظة تشغيل التكييف °م <input id="troom0" type="number" step="0.5" style="width:80px"></label>
-    <button class="sec" onclick="fetchOutdoor()">📍 هات حرارة الجو من النت</button>
-    <span class="mut" id="envinfo"></span>
-  </div>
-  <div class="mut" style="margin-top:6px">التكييف: الغرفة بتسخن من برا وبتبرد بالتكييف، والثرموستات بيشغّل ويفصل الكومبروسور (±0.5°) — يعني <b>الكومبروسور مش بيفضل شغال ثابت</b>: ≈100% في أول التشغيل (pull-down) وبعدين بيقل لحد نسبة الاستقرار d = UA·(الجو − المظبوطة) ÷ (COP·قدرة التكييف). السخان والغسالة: وقت التسخين = لتر × 4.186 × (المظبوطة − حرارة المية) ÷ القدرة. الحرارة المظبوطة ومساحة الغرفة بيتضبطوا في كارت كل جهاز.</div>
-</div>
-
-<div class="card"><h2>🔎 تحليل الحمل الحالي (من الأرقام فقط)</h2><div id="loadinfo" class="mut">في انتظار البيانات…</div></div>
-
-<div class="card" id="alwaysCard"><h2>🏠 أجهزة شغالة 24 ساعة (الحمل الأساسي)</h2>
-  <div class="mut" style="margin-bottom:8px">ضيف اللي بيفضل شغال طول اليوم. الجهاز اللي بيشتغل ويفصل (تلاجة/فريزر: كومبروسر) اختار له "بيشتغل ويفصل"، والثابت (راوتر، إضاءة، ستاند باي) اختار "ثابت". من هنا بنعرف الحمل الأساسي ونفصله عن باقي الأجهزة.</div>
-  <div id="alwaysList"></div>
-  <div class="row" style="margin-top:8px">
-    <button class="sec" onclick="addAlways('fridge')">+ تلاجة</button>
-    <button class="sec" onclick="addAlways('freezer')">+ فريزر</button>
-    <button class="sec" onclick="addAlways('router')">+ راوتر</button>
-    <button class="sec" onclick="addAlways('lights')">+ إضاءة</button>
-    <button class="sec" onclick="addAlways('custom')">+ جهاز تاني</button>
-    <button class="sec" onclick="resetTrim()">تصفير التصحيح المتعلَّم</button>
-  </div>
-  <div class="mut" id="alwaysInfo" style="margin-top:8px"></div>
-</div>
-
 <div class="card"><h2>📊 توزيع الاستهلاك المقاس (من آخر ضبط)</h2><div id="breakdown" class="mut">في انتظار البيانات…</div></div>
 
 <div class="card" id="top"><h2>💡 نصائح دلوقتي</h2><div id="topAdvice" class="mut">في انتظار البيانات…</div></div>
 
 <div class="card" id="saveCard"><h2>💰 اقتراحات التوفير (من استهلاك أجهزتك الفعلي)</h2><div id="saveAdvice" class="mut">في انتظار البيانات…</div></div>
 
-<div class="card" id="testPanel" hidden style="border:1px dashed var(--warn)"><h2>🧪 وضع الاختبار (بيانات تجريبية من غير جهاز)</h2>
-  <div class="mut" style="margin-bottom:8px">بيحقن حالات جاهزة ويتأكد إن النصائح والأرقام صح. الإعدادات بترجع زي ما كانت بعد كل حالة.</div>
-  <div class="row"><button onclick="runAllScenarios()">▶ شغّل كل الاختبارات</button>
-    <button class="sec" onclick="sendFault(1.6)">⚠️ عطل مُحاكى في الجهاز (1.6×)</button>
-    <button class="sec" onclick="sendFault(1)">إلغاء العطل</button></div>
-  <div id="testOut" style="margin-top:10px"></div></div>
+<div id="settingsPage" hidden><div class="sp-in">
+  <div class="sp-head"><button class="sec" onclick="closeSettings()">→ رجوع</button><h1>الإعدادات</h1></div>
+
+  <section class="card"><h2>🎨 المظهر</h2>
+    <div class="sw-grid">
+      <button class="sw" data-t="mint"  onclick="applyTheme('mint',1)"><i style="background:#4ade80"></i>أخضر فاتح</button>
+      <button class="sw" data-t="lime"  onclick="applyTheme('lime',1)"><i style="background:#bef264"></i>ليموني</button>
+      <button class="sw" data-t="white" onclick="applyTheme('white',1)"><i style="background:#fff"></i>أبيض</button>
+      <button class="sw" data-t="dark"  onclick="applyTheme('dark',1)"><i style="background:#15203a"></i>ليلي</button>
+    </div></section>
+
+  <section class="card"><h2>🔔 الإشعارات</h2>
+    <label class="switch"><input type="checkbox" id="notifOn" onchange="toggleNotif(this.checked)"> نبّهني لو في استهلاك عالي أو اقتراح توفير</label>
+    <div class="mut" id="notifInfo" style="margin-top:6px"></div></section>
+
+  <section class="card"><h2>⚡ الفاتورة والدورة</h2>
+    <div class="row">
+      <label>حد الشريحة kWh <input id="cap" type="number"></label>
+      <label>بداية الدورة <input id="cycle" type="date"></label>
+      <label>أيام الدورة <input id="days" type="number" min="28" max="35"></label>
+      <label>حدود الشرايح kWh (بفاصلة) <input id="tiers" style="width:230px;max-width:100%"></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button onclick="saveSettings();closeSettings()">حفظ</button>
+      <button class="sec" onclick="resetCounter()">ضبط استهلاك الدورة الحالي</button>
+    </div></section>
+
+  <section class="card"><h2>🌡️ الجو</h2>
+    <div class="row">
+      <label>حرارة الجو بره °م <input id="tout" type="number" step="0.5" style="width:80px"></label>
+      <label>حرارة مية الدخول °م <input id="tin" type="number" step="0.5" style="width:80px"></label>
+      <label>حرارة الغرفة لحظة تشغيل التكييف °م <input id="troom0" type="number" step="0.5" style="width:80px"></label>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="sec" onclick="fetchOutdoor()">📍 هات حرارة الجو من النت</button><span class="mut" id="envinfo"></span></div></section>
+
+  <section class="card"><h2>🏠 أجهزة شغالة 24 ساعة</h2>
+    <div class="mut" style="margin-bottom:8px">ضيف الأجهزة اللي بتفضل شغالة طول اليوم (تلاجة، راوتر، إضاءة...).</div>
+    <div id="alwaysList"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="sec" onclick="addAlways('fridge')">+ تلاجة</button>
+      <button class="sec" onclick="addAlways('freezer')">+ فريزر</button>
+      <button class="sec" onclick="addAlways('router')">+ راوتر</button>
+      <button class="sec" onclick="addAlways('lights')">+ إضاءة</button>
+      <button class="sec" onclick="addAlways('custom')">+ جهاز تاني</button>
+    </div>
+    <div class="mut" id="alwaysInfo" style="margin-top:8px"></div></section>
+
+  <section class="card"><h2>🔗 ربط الجهاز</h2>
+    <label>كود جهازك (SITE_ID) <input id="site" style="width:100%"></label>
+    <div style="margin-top:10px"><button onclick="saveSettings();closeSettings()">حفظ وإعادة الاتصال</button></div></section>
+
+  <section class="card"><h2>👤 الحساب</h2>
+    <button class="sec" id="userBtn" onclick="signOut()" hidden></button>
+    <div class="mut" id="noAcc">أنت مش مسجّل دخول — الإعدادات محفوظة في المتصفح ده بس.</div></section>
+</div></div>
 
 <div class="grid" id="devs"></div>
 
@@ -366,80 +374,6 @@ function savingsPlan(kind,P,devRate,daysLeft,proj,cap,tiers){
 }
 // </logic>
 </script>
-<script id="selftest">
-// اختبارات الوحدات (بتشتغل في المتصفح من وضع الاختبار ?test ، وفي Node من tests/dashboard_test.js)
-function runLogicTests(){
-  const R=[]; const T=(name,ok,detail)=>R.push({name,ok:!!ok,detail:detail||''});
-  const near=(a,b,e=1e-6)=>Math.abs(a-b)<=e;
-  T('سخان: 50 لتر من 20 لـ 55 على 1500W ≈ 4883 ث (81 د)', near(heatSeconds(50,55,20,1500),4883.3,1), heatSeconds(50,55,20,1500).toFixed(1));
-  T('سخان: مية دخول أدفى → تسخين أقصر', heatSeconds(50,55,28,1500)<heatSeconds(50,55,15,1500));
-  T('سخان: حرارة مظبوطة أعلى → تسخين أطول', heatSeconds(50,60,20,1500)>heatSeconds(50,50,20,1500));
-  T('سخان: مفيش فرق → صفر', heatSeconds(50,20,20,1500)===0);
-  T('سخان واقف: ثرموستات أعلى → وقت وصل أطول', standbyOnSeconds(60)>standbyOnSeconds(50));
-  T('غسالة: 7 كجم من 20 لـ 40 ≈ 666 ث', near(washHeatSeconds(7,40,20,1760),665.9,1), washHeatSeconds(7,40,20,1760).toFixed(1));
-  T('غسالة: غسيل بارد → الحد الأدنى 60 ث', washHeatSeconds(7,20,20,1760)===60);
-  const t=TIERS_DEFAULT;
-  T('شريحة: 0 → الأولى', tierOf(0,t).n===1 && tierOf(0,t).end===50);
-  T('شريحة: 50 بالظبط → الثانية', tierOf(50,t).n===2);
-  T('شريحة: 180 → الثالثة (101–200)', tierOf(180,t).n===3 && tierOf(180,t).start===100 && tierOf(180,t).end===200);
-  T('شريحة: 1000 → السابعة (مفتوحة)', tierOf(1000,t).n===7 && tierOf(1000,t).last);
-  const e=endurance(180,t,1.0);
-  T('تحمل: 180 kWh و 1 kW → 20 ساعة في الحالية و150 في الجاية', near(e.hoursLeft,20)&&near(e.nextSpanKWh,150)&&near(e.hoursNext,150));
-  T('تحمل: الشريحة السادسة → الجاية مفتوحة', endurance(700,t,1).nextSpanKWh===Infinity);
-  T('تحمل: السابعة → مفيش حد', endurance(1200,t,1).leftKWh===Infinity && endurance(1200,t,1).nextSpanKWh===null);
-  T('ساعات/يوم: ميزانية 1 kWh/يوم بعد خصم 0.5 و AC 1kW → 0.5 ساعة', near(dailyHours(10,10,0.5,1),0.5));
-  T('ساعات/يوم: لو باقي البيت لوحده عدّى الميزانية → صفر', dailyHours(10,10,2,1)===0);
-  // الحكم
-  const P={out:38,inlet:20,set:24,val:50,w:1500};
-  // ---- تكييف: نموذج RC + ثرموستات ----
-  const AP={out:38,set:24,area:20,w:1325,room0:30}, prof=acProfile(AP);
-  T('تكييف: نسبة الاستقرار (جو 38، مظبوط 24، غرفة 20م²، 1325W) = 77.5%', near(acSteadyDuty(38,24,20,1325),220*14/(3*1325),1e-9), acSteadyDuty(38,24,20,1325).toFixed(4));
-  T('تكييف: التكييف الأكبر (HP أعلى) لنفس الغرفة → نسبة تشغيل أقل', acSteadyDuty(38,24,20,1700)<acSteadyDuty(38,24,20,1325));
-  T('تكييف: متوسط السحب P×d ما بيتغيرش مع حجم التكييف', near(1700*acSteadyDuty(38,24,20,1700),1325*acSteadyDuty(38,24,20,1325),1e-6));
-  T('تكييف: الجو = المظبوط → صفر', acSteadyDuty(24,24,20,1325)===0);
-  T('تكييف: كل ما الجو يسخن النسبة تزيد', acSteadyDuty(30,24,20,1325)<acSteadyDuty(35,24,20,1325) && acSteadyDuty(35,24,20,1325)<acSteadyDuty(40,24,20,1325));
-  T('تكييف (RC): أول 20 دقيقة الكومبروسور ≈100% (pull-down)', prof.dutyAt(1200)>0.95, prof.dutyAt(1200).toFixed(3));
-  T('تكييف (RC): بعدين بيفصل ويشتغل → النسبة بتقل', prof.dutyAt(6*3600)<prof.dutyAt(1200)-0.15, prof.dutyAt(6*3600).toFixed(3));
-  T('تكييف (RC): النسبة طويلة المدى ≈ نسبة الاستقرار (±0.05)', Math.abs(prof.dutyAt(6*3600)-prof.steady)<0.05);
-  T('تكييف (RC): الغرفة باردة أصلاً (20°) → النسبة بتبدأ أقل', acProfile({...AP,room0:20}).dutyAt(1200)<prof.dutyAt(1200));
-  T('تكييف: ساعات تشغيل 20 kWh ≈ 19.9 (بتحسب إن الأول أعلى)', Math.abs(acHoursForEnergy(prof,1325,20)-19.9)<0.6, acHoursForEnergy(prof,1325,20).toFixed(2));
-  const Eac=expectedFor('ac',AP);
-  const onN=sec=>Math.round(prof.onAt(sec));
-  T('حكم تكييف: تشغيل زي المتوقع بالظبط → طبيعي', judgeThermal('ac',{on:1,ses:1,sec:7200,rm:onN(7200)},Eac).state==='normal');
-  T('حكم تكييف: 100% بعد ساعتين والمتوقع ≈ 80% → أعلى من الطبيعي', judgeThermal('ac',{on:1,ses:1,sec:7200,rm:7200},Eac).state==='high');
-  T('حكم تكييف: أول 20 دقيقة → لسه بنقيس', judgeThermal('ac',{on:1,ses:1,sec:900,rm:900},Eac).state==='measuring');
-  T('حكم تكييف: 100% في أول 20 دقيقة طبيعي (pull-down) مش شذوذ', judgeThermal('ac',{on:1,ses:1,sec:1250,rm:1250},Eac).state==='normal');
-  T('حكم تكييف: نفس الفعلي طبيعي في الحر وعالي في الجو المعتدل', (()=>{ const rm=Math.round(0.5*3600); const hot=judgeThermal('ac',{on:1,ses:1,sec:3600,rm},Eac).state, mild=judgeThermal('ac',{on:1,ses:1,sec:3600,rm},expectedFor('ac',{...AP,out:28})).state; return hot==='normal'&&mild==='high'; })());
-  T('حكم تكييف: مش شغال → idle', judgeThermal('ac',{on:0,ses:0,sec:0,rm:0},Eac).state==='idle');
-  const Eh=expectedFor('heater',{...P,set:55});   // السخان 55° (مش 24° بتاعة التكييف)
-  T('حكم سخان: تسخين 50 دقيقة (المتوقع 81) → طبيعي', judgeThermal('heater',{on:1,ses:1,ms:3000},Eh).state==='normal');
-  T('حكم سخان: 7000 ث تسخين متواصل → أعلى من الطبيعي', judgeThermal('heater',{on:1,ses:1,ms:7000},Eh).state==='high');
-  T('حكم سخان: الثرموستات فاصل → طبيعي', judgeThermal('heater',{on:0,ses:1,ms:0},Eh).state==='normal');
-  T('حكم سخان: وصلة ثرموستات قصيرة (300ث) → طبيعي حتى لو التسخين الأولي قصير', judgeThermal('heater',{on:1,ses:1,ms:300},expectedFor('heater',{...P,set:22})).state==='normal');
-  const Ew=expectedFor('washer',{...P,set:40,val:7,w:1760});
-  T('حكم غسالة: تسخين 600ث (المتوقع 666) → طبيعي', judgeThermal('washer',{on:1,ses:1,mode:1,ms:600},Ew).state==='normal');
-  T('حكم غسالة: تسخين 1500ث → أعلى من الطبيعي', judgeThermal('washer',{on:1,ses:1,mode:1,ms:1500},Ew).state==='high');
-  T('حكم غسالة: مرحلة الغسيل → طبيعي', judgeThermal('washer',{on:1,ses:1,mode:2,ms:1700},Ew).state==='normal');
-  // ---- اقتراحات التوفير ----
-  const SP={out:38,inlet:20,set:24,area:20,w:1325,val:50};
-  const sa=savingStep('ac',SP);
-  T('توفير تكييف: رفع من 24 لـ 26', sa&&sa.newSet===26&&sa.dir==='up');
-  T('توفير تكييف: النسبة بتتحسب من نسبة الاستقرار (≈14%)', sa&&near(sa.frac,1-acSteadyDuty(38,26,20,1325)/acSteadyDuty(38,24,20,1325),1e-9)&&sa.frac>0.10&&sa.frac<0.20, sa&&sa.frac.toFixed(3));
-  T('توفير تكييف: على 27 أو أكتر → مفيش اقتراح', savingStep('ac',{...SP,set:27})===null && savingStep('ac',{...SP,set:28})===null);
-  T('توفير تكييف: الجو أبرد من المظبوطة → مفيش اقتراح', savingStep('ac',{...SP,out:22})===null);
-  T('توفير سخان: من 55 لـ 50 والتوفير 5/35 = 14%', (()=>{ const x=savingStep('heater',{...SP,set:55}); return x&&x.newSet===50&&near(x.frac,5/35,1e-9)&&x.dir==='down'; })());
-  T('توفير سخان: مش بينزل تحت 45', savingStep('heater',{...SP,set:47}).newSet===45 && savingStep('heater',{...SP,set:45})===null);
-  T('توفير غسالة: من 40 لـ 30 (تقدير 80% من الطاقة تسخين)', (()=>{ const x=savingStep('washer',{...SP,set:40}); return x&&x.newSet===30&&near(x.frac,0.8*10/20,1e-9); })());
-  T('توفير: تلفزيون → مفيش نموذج', savingStep('tv',SP)===null);
-  const pl=savingsPlan('ac',SP,7.2,10,330,350,TIERS_DEFAULT);
-  T('خطة التوفير: kWh/يوم × الأيام الباقية', pl&&near(pl.saveCycle,pl.saveDay*10,1e-9)&&near(pl.saveDay,7.2*pl.frac,1e-9));
-  T('خطة التوفير: توقع جديد = القديم − التوفير', pl&&near(pl.proj2,330-pl.saveCycle,1e-9));
-  T('خطة التوفير: نزل شريحة لو التوفير عدّى الحد (مثال: 205 → ≤200)', (()=>{ const x=savingsPlan('heater',{...SP,set:55},10,10,205,350,TIERS_DEFAULT); return x&&x.t1===4&&x.t2===3; })());
-  T('خطة التوفير: من فوق الحد لتحته → underCap', (()=>{ const x=savingsPlan('ac',SP,20,10,360,350,TIERS_DEFAULT); return x&&x.proj2<=350&&x.underCap; })());
-  T('خطة التوفير: من غير قياس → نسبة بس من غير kWh', (()=>{ const x=savingsPlan('ac',SP,null,10,300,350,TIERS_DEFAULT); return x&&x.pct>0&&x.saveCycle===null; })());
-  return R;
-}
-</script>
 <script type="text/plain" id="main-src">
 const $ = s => document.querySelector(s);
 const DEVS = [
@@ -498,7 +432,7 @@ DEVS.forEach(d=>{
       ${SETLBL[d.id]?`<label>${SETLBL[d.id]} <input type="number" id="s-${d.id}" step="1" style="width:70px"></label>`:''}
       ${d.id.startsWith('ac')?`<label>مساحة الغرفة m² <input type="number" id="ar-${d.id}" min="6" max="80" step="1" style="width:70px"></label>`:''}
     </div>
-    <div class="mut" style="margin-top:8px"><b id="m-${d.id}" style="color:var(--tx)"></b> السحب الآن: <b id="w-${d.id}">0</b> W · مدة الجلسة: <b id="t-${d.id}">0</b> د (تشغيل فعلي <b id="r-${d.id}">0</b> د · فصل/وصل <b id="y-${d.id}">0</b> مرة) · استهلاكه: <b id="k-${d.id}">0</b> kWh</div>
+    <div class="mut" style="margin-top:8px"><b id="m-${d.id}" style="color:var(--tx)"></b> السحب الآن: <b id="w-${d.id}">0</b> W<span hidden><b id="t-${d.id}"></b><b id="r-${d.id}"></b><b id="y-${d.id}"></b></span> · استهلاكه: <b id="k-${d.id}">0</b> kWh</div>
     <div class="dbars">
       <div><div class="mut">السحب الآن من قدرته (<span id="wp-${d.id}">0</span>%)</div><div class="bar sm"><i id="dbar-${d.id}"></i></div></div>
       <div><div class="mut">حصته من الاستهلاك المقاس (<span id="sp-${d.id}">0</span>%)</div><div class="bar sm"><i id="sbar-${d.id}" style="background:var(--acc)"></i></div></div>
@@ -549,7 +483,7 @@ function renderAlways(){
       <input value="${a.name}" style="width:150px" onchange="editAlways(${i},'name',this.value)">
       <label>W <input type="number" min="1" value="${a.w}" onchange="editAlways(${i},'w',+this.value)"></label>
       <label>PF <input type="number" min="0.3" max="1" step="0.05" value="${a.pf}" style="width:70px" onchange="editAlways(${i},'pf',+this.value)"></label>
-      <select onchange="editAlways(${i},'cyc',this.value==='1')" style="background:#0b1220;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px">
+      <select onchange="editAlways(${i},'cyc',this.value==='1')">
         <option value="0" ${a.cyc?'':'selected'}>ثابت</option><option value="1" ${a.cyc?'selected':''}>بيشتغل ويفصل</option></select>
       <button class="sec" onclick="delAlways(${i})">🗑</button>
     </div>`).join('') || '<div class="mut">مفيش أجهزة مضافة.</div>';
@@ -561,7 +495,6 @@ function renderAlways(){
 function addAlways(k){ cfg.always.push({...PRESETS[k]}); renderAlways(); pushConfig(); }
 function delAlways(i){ cfg.always.splice(i,1); renderAlways(); pushConfig(); }
 function editAlways(i,f,v){ if(f==='name'){cfg.always[i][f]=v;} else if(f==='cyc'){cfg.always[i].cyc=v;} else {cfg.always[i][f]=v>0?v:cfg.always[i][f];} renderAlways(); pushConfig(); }
-function resetTrim(){ if(client&&client.connected) client.publish(topic('cmd'),JSON.stringify({resetTrim:true})); }
 renderAlways();
 
 // ---------- MQTT ----------
@@ -619,7 +552,7 @@ function renderBreakdown(s){
   const cn=cycNames();
   const rows=s.dev.map(x=>{ const m=/^bg(\d)$/.exec(x.id);
     return {n: m ? '🏠 '+(cn[+m[1]]||'جهاز 24 ساعة') : ((DEVS.find(q=>q.id===x.id)||{}).name||x.id), k:x.kwh}; });
-  rows.push({n:'🏠 حمل أساسي ثابت (راوتر، إضاءة...)',k:s.bkwh},{n:'❔ غير متعرّف عليه',k:s.okwh});
+  rows.push({n:'🏠 باقي البيت (راوتر، إضاءة...)',k:(s.bkwh||0)+(s.okwh||0)});
   const tot=rows.reduce((a,r)=>a+r.k,0);
   if(tot<=0){ $('#breakdown').textContent='لسه مفيش قياس.'; return; }
   $('#breakdown').innerHTML=rows.sort((a,b)=>b.k-a.k).map(r=>{const p=r.k/tot*100;
@@ -743,8 +676,7 @@ function renderBars(s,f,used,cap,proj){
 }
 function render(s){
   const used=s.kwh, cap=s.cap, rem=Math.max(0,cap-used);
-  $('#pw').textContent=s.p; $('#pf').textContent=s.pf;
-  $('#vi').textContent = s.v ? `${s.v} V · ${s.i} A` : '--';
+  $('#pw').textContent=s.p;
   $('#kwh').textContent=used.toFixed(1); $('#capv').textContent=cap; $('#rem').textContent=rem.toFixed(1);
   const pct=Math.min(100,used/cap*100); const bar=$('#capbar');
   bar.style.width=pct+'%'; bar.style.background = pct>90?'var(--bad)':pct>75?'var(--warn)':'var(--ok)';
@@ -755,13 +687,9 @@ function render(s){
   $('#proj').textContent=proj==null?'--':proj.toFixed(0);
   $('#proj').style.color=proj==null?'':projOver?'var(--bad)':'var(--ok)';
   $('#capdate').textContent = used>=cap?'عدّيت الحد ⛔' : f.capDate ? f.capDate.toLocaleDateString('ar-EG',{day:'numeric',month:'long'}) : (proj==null?'--':'مش هتوصل ✅');
-  $('#acc').textContent = f.rate==null ? 'محتاج وقت قياس أكتر' :
-    `دقة التوقع ${Math.round((f.hasHist?f.w:1)*100)}% · ساعات القياس: ${f.hrs.toFixed(1)}`;
   renderBreakdown(s);
   const totK=(s.dev||[]).reduce((a,x)=>a+(x.kwh||0),0)+(s.bkwh||0)+(s.okwh||0);
   try{ renderBars(s,f,used,cap,proj); }catch(e){ console.error(e); }
-  const CLS={none:'مفيش حمل فوق الأساسي',res:'حمل مقاوم (سخان / إضاءة / تلفزيون)',ind:'حمل حثي (موتور / كومبروسور زي التكييف)',mixed:'حمل مختلط: جزء حثي + جزء مقاوم شغالين مع بعض'};
-  $('#loadinfo').innerHTML = `<div style="font-size:16px;color:var(--tx)">${CLS[s.cls]||'--'}</div><div style="margin-top:6px">حثي ≈ <b>${s.ind||0}</b> W · مقاوم ≈ <b>${s.res||0}</b> W · PF الكلي <b>${s.pf}</b></div><div style="margin-top:4px">لما الـ PF يبقى بين الحثي (~0.8) والمقاوم (~1) ده معناه إن الاتنين شغالين مع بعض.</div>`;
 
   const top=[];
   if(rem<=0) top.push({lvl:'bad',t:'⛔ عديت حد الشريحة! أي استهلاك زيادة هيتحاسب بسعر أعلى.'});
@@ -790,7 +718,7 @@ function render(s){
         // تكييف / سخان / غسالة: لو شغالين بالمعدل الطبيعي لفرق الحرارة → مفيش نصيحة
         const P=devParams(d), J=judgeThermal(k,x,expectedFor(k,P));
         if(J.state==='high') tip={lvl:'warn',t:thermalTip(d,k,x,J,P)};
-        else th.textContent=thermalLine(k,J,P)+(x.rt!=null?` · 🌡️ حرارة الغرفة (محاكاة) ${x.rt}°م`:'');
+        else th.textContent=J.state==='normal'?'✅ شغال بشكل طبيعي':'';
       }
     }
     if(tip){
@@ -811,10 +739,6 @@ function render(s){
     }
   });
   renderSavings(savList,f,cap);
-  const tr=s.trim||0;
-  $('#alwaysInfo').dataset.live = '';
-  if(typeof s.base==='number') $('#alwaysInfo').innerHTML = $('#alwaysInfo').innerHTML.replace(/<div id="live">.*?<\/div>/,'') +
-    `<div id="live" style="margin-top:4px">الحمل الأساسي الفعلي دلوقتي: <b>${s.base}</b> W · التصحيح المتعلَّم: <b>${tr>=0?'+':''}${tr}</b> W${Math.abs(tr)>40?' <span style="color:var(--warn)">— غالبًا في جهاز 24 ساعة ناقص، ضيفه فوق.</span>':''}</div>`;
   $('#topAdvice').innerHTML=top.map(a=>`<div class="advice ${a.lvl}">${a.t}</div>`).join('');
 
   if(!window.__snap){ series.push(s.p); if(series.length>150) series.shift(); }
@@ -823,92 +747,12 @@ function render(s){
 }
 function drawChart(){
   const c=$('#chart'),g=c.getContext('2d'),W=c.width,H=c.height; g.clearRect(0,0,W,H);
-  const max=Math.max(1000,...series); g.strokeStyle='#38bdf8'; g.lineWidth=2; g.beginPath();
+  const max=Math.max(1000,...series); const _cs=getComputedStyle(document.documentElement); g.strokeStyle=_cs.getPropertyValue('--accd').trim(); g.lineWidth=2; g.beginPath();
   series.forEach((v,i)=>{const x=i/149*W,y=H-v/max*(H-10)-5; i?g.lineTo(x,y):g.moveTo(x,y)}); g.stroke();
-  g.fillStyle='#94a3b8'; g.font='12px Tahoma'; g.fillText(max+' W',6,14);
+  g.fillStyle=_cs.getPropertyValue('--mut').trim(); g.font='12px Tahoma'; g.fillText(max+' W',6,14);
 }
-function askNotif(){ if('Notification' in window) Notification.requestPermission(); }
-function notify(t,b){ if(window.__snap) return; if('Notification' in window && Notification.permission==='granted') new Notification(t,{body:b}); }
+function notify(t,b){ if(window.__snap||LS.get('sea-notif')!=='1') return; if('Notification' in window && Notification.permission==='granted') new Notification(t,{body:b}); }
 setInterval(()=>{ if(lastSeen && Date.now()-lastSeen>8000) $('#devstat').textContent='مفيش بيانات ❌'; },3000);
-// ---------- وضع الاختبار (افتح الصفحة بـ ?test) ----------
-const mkDev=(id,o)=>Object.assign({id,on:0,mode:0,ses:0,w:0,sec:0,run:0,cyc:0,kwh:0,rm:0,ms:0},o||{});
-const mkState=(kwh,devs)=>({p:1500,v:220,i:'7.0',cls:'ind',ind:1400,res:0,pf:'0.82',kwh,cap:350,base:82,trim:0,meas:5,msec:36000,bkwh:1,okwh:0,unk:0,
-  dev:['ac1','ac2','heater1','heater2','washer','tv'].map(id=>mkDev(id,(devs||{})[id]))});
-const PR=(o={})=>acProfile({out:38,set:24,area:20,w:1325,room0:30,...o});
-const BASECFG={out:38,inlet:20,room0:30,area:{ac1:20,ac2:36},set:{ac1:24,ac2:24,heater1:55,heater2:55,washer:40},val:{ac1:1.5,ac2:3,heater1:50,heater2:30,washer:7}};
-const SCEN=[
- {n:'تكييف بعد ساعتين بالمعدل الطبيعي (المنحنى المتوقع من نموذج RC) → مفيش نصيحة', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
-  chk:q=>[['مفيش نصيحة للتكييف',!q.top.includes('تكييف 1')&&q.adv('ac1')===''],['الكارت بيقول طبيعي',q.th('ac1').includes('طبيعي')],['بيشرح إن الكومبروسور مش ثابت',q.th('ac1').includes('pull-down')]]},
- {n:'تكييف كومبروسوره شغال 100% بعد ساعتين (المتوقع ≈ 80%) → نصيحة', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:7200,rm:7200,kwh:3}}),
-  chk:q=>[['ظهرت نصيحة التكييف',q.top.includes('تكييف 1')&&q.adv('ac1').includes('الكومبروسور')]]},
- {n:'تكييف في أول 15 دقيقة → بنقيس (من غير نصيحة)', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:900,run:900,rm:900}}),
-  chk:q=>[['مفيش نصيحة',!q.top.includes('تكييف 1')],['بيقول بنقيس',q.th('ac1').includes('بنقيس')]]},
- {n:'100% في أول 25 دقيقة (pull-down) → طبيعي مش شذوذ', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:1500,run:1500,rm:1500}}),
-  chk:q=>[['مفيش نصيحة',!q.top.includes('تكييف 1')]]},
- {n:'نفس التشغيل الفعلي — جو 38° طبيعي', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:3600,run:2400,rm:Math.round(0.5*3600)}}),
-  chk:q=>[['طبيعي في الحر',!q.top.includes('تكييف 1')]]},
- {n:'نفس التشغيل الفعلي (50%) — جو 28° (المتوقع أقل بكتير) → نصيحة', cfg:{out:28}, st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:3600,run:2400,rm:Math.round(0.5*3600)}}),
-  chk:q=>[['اتحسب كزيادة عن الطبيعي',q.top.includes('تكييف 1')]]},
- {n:'غرفة أكبر (36م² بدل 20م²) بنفس التكييف → المتوقع أعلى فمفيش نصيحة لنفس الفعلي', cfg:{area:{ac1:36}}, st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:7200,rm:Math.round(0.95*7200)}}),
-  chk:q=>[['مفيش نصيحة',!q.top.includes('تكييف 1')]]},
- {n:'سخان بيسخّن 50 دقيقة (المتوقع ≈81 د) → طبيعي', st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:3000,run:3000,rm:3000,ms:3000}}),
-  chk:q=>[['مفيش نصيحة',!q.top.includes('سخان 1')],['كارت: طبيعي',q.th('heater1').includes('طبيعي')]]},
- {n:'سخان تسخين متواصل 7000 ث (المتوقع 4883) → نصيحة', st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:7000,run:7000,rm:7000,ms:7000}}),
-  chk:q=>[['ظهرت نصيحة السخان',q.top.includes('سخان 1')]]},
- {n:'سخان فاصل بالثرموستات → مفيش نصيحة (القديمة اتشالت)', st:()=>mkState(180,{heater1:{on:0,ses:1,sec:9000,run:5000,rm:5000,ms:0}}),
-  chk:q=>[['مفيش نصيحة',!q.top.includes('سخان 1')&&!q.top.includes('متوصّل')]]},
- {n:'سخان بحرارة 60° بدل 55° → وقت المتوقع أطول', cfg:{set:{heater1:60}}, st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:3000,run:3000,rm:3000,ms:3000}}),
-  chk:q=>[['المتوقع ≈ 93 د',q.th('heater1').includes('93')]]},
- {n:'غسالة بتسخّن 600 ث (المتوقع ≈11 د) → طبيعي', st:()=>mkState(180,{washer:{on:1,mode:1,ses:1,sec:600,run:600,rm:600,ms:600}}),
-  chk:q=>[['مفيش نصيحة',!q.top.includes('غسالة')]]},
- {n:'غسالة بتسخّن 1500 ث → نصيحة', st:()=>mkState(180,{washer:{on:1,mode:1,ses:1,sec:1500,run:1500,rm:1500,ms:1500}}),
-  chk:q=>[['ظهرت نصيحة الغسالة',q.top.includes('غسالة')]]},
- {n:'غسالة في مرحلة الغسيل → مفيش نصيحة', st:()=>mkState(180,{washer:{on:1,mode:2,ses:1,sec:2400,run:2400,rm:700,ms:1700}}),
-  chk:q=>[['مفيش نصيحة',!q.top.includes('غسالة')]]},
- {n:'تحمّل التكييف جوه الشريحة (180 kWh → الشريحة 3 فاضل 20)', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
-  chk:q=>[['الشريحة الحالية 101–200',q.end('ac1').includes('3: 101–200')],['فاضل 20.0',q.end('ac1').includes('فاضل 20.0')],['الشريحة الجاية 201–350 فيها 150',q.end('ac1').includes('201–350')&&q.end('ac1').includes('150 kWh')],['متوسط السحب ≈ 1027 W (UA·ΔT÷COP)',q.end('ac1').includes('1027')],['فيه ساعات/يوم',q.end('ac1').includes('في اليوم')]]},
- {n:'تحمّل السخان بعدد التسخينات', st:()=>mkState(180,{}),
-  chk:q=>[['بيقول مرة تسخين',q.end('heater1').includes('مرة تسخين')]]},
- {n:'فوق 1000 kWh → آخر شريحة', st:()=>mkState(1200,{}),
-  chk:q=>[['آخر شريحة',q.end('ac1').includes('آخر شريحة')]]},
- {n:'التلفزيون لسه بياخد نصيحته', st:()=>mkState(180,{tv:{on:1,mode:1,ses:1,sec:600,run:600,w:100}}),
-  chk:q=>[['نصيحة التلفزيون',q.top.includes('تلفزيون')]]},,
- {n:'توفير: تكييف على 24° شغال → اقتراح رفع لـ 26 بالكيلووات', st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
-  chk:q=>[['اقتراح توفير للتكييف',q.sv('ac1').includes('توفير')&&q.sv('ac1').includes('26')],['اتحسب بالكيلووات',/kWh\/يوم/.test(q.sv('ac1'))],['ظهر في كارت التوفير',q.save.includes('تكييف 1')&&q.save.includes('لو طبّقت كل الاقتراحات')]]},
- {n:'توفير: تكييف على 27° → مفيش اقتراح', cfg:{set:{ac1:27}}, st:()=>mkState(180,{ac1:{on:1,mode:1,ses:1,sec:7200,run:6000,rm:Math.round(PR().onAt(7200)),kwh:3}}),
-  chk:q=>[['مفيش اقتراح',q.sv('ac1')==='']]},
- {n:'توفير: سخان على 55° → اقتراح خفض لـ 50', st:()=>mkState(180,{heater1:{on:1,mode:1,ses:1,sec:3000,run:3000,rm:3000,ms:3000,kwh:2}}),
-  chk:q=>[['اقتراح خفض لـ 50',q.sv('heater1').includes('50')&&q.sv('heater1').includes('تخفض')]]},
- {n:'توفير: جهاز مش شغال ولا استهلك → مفيش اقتراح', st:()=>mkState(180,{}),
-  chk:q=>[['مفيش اقتراح للتكييف',q.sv('ac1')==='']]},
- {n:'كل الأجهزة: التلفزيون والغسالة ليهم خطة تشغيل لكل شريحة', st:()=>mkState(180,{tv:{on:1,mode:1,ses:1,sec:600,run:600,kwh:0.1},washer:{on:1,mode:1,ses:1,sec:600,run:600,rm:600,ms:600,kwh:0.2}}),
-  chk:q=>[['التلفزيون',q.end('tv').includes('ساعة')||q.end('tv').includes('دقيقة')],['الغسالة',q.end('washer').includes('غسلة')]]}
-];
-function runScenario(sc){
-  const backup=JSON.stringify(cfg), nb=JSON.stringify(notified), res=[];
-  try{
-    const o=Object.assign({},BASECFG,sc.cfg||{}); cfg.env.out=o.out; cfg.env.inlet=o.inlet; cfg.env.room0=o.room0;
-    ['ac1','ac2'].forEach(id=>cfg.devs[id].area=(sc.cfg&&sc.cfg.area&&sc.cfg.area[id]!=null)?sc.cfg.area[id]:BASECFG.area[id]);
-    Object.keys(BASECFG.set).forEach(id=>{cfg.devs[id].set=(sc.cfg&&sc.cfg.set&&sc.cfg.set[id]!=null)?sc.cfg.set[id]:BASECFG.set[id]; cfg.devs[id].val=BASECFG.val[id]; cfg.devs[id].on=true;});
-    cfg.tiers=TIERS_DEFAULT.slice();
-    render(sc.st());
-    const q={top:$('#topAdvice').textContent, th:id=>$('#th-'+id).textContent, adv:id=>$('#a-'+id).textContent, end:id=>$('#e-'+id).textContent, sv:id=>$('#sv-'+id).textContent, save:$('#saveAdvice').textContent};
-    sc.chk(q).forEach(([d,ok])=>res.push({name:sc.n+' ← '+d,ok}));
-  }catch(e){ res.push({name:sc.n+' ← خطأ: '+e.message,ok:false}); }
-  cfg=JSON.parse(backup); notified=JSON.parse(nb);
-  return res;
-}
-function runAllScenarios(){
-  let all=runLogicTests().map(r=>({name:'[منطق] '+r.name,ok:r.ok,detail:r.detail}));
-  window.__snap=true;   // وضع الاختبار ما يبعتش إشعارات ولا يلوّث المخطط الحي
-  try{ SCEN.forEach(sc=>all=all.concat(runScenario(sc))); } finally{ window.__snap=false; }
-  const bad=all.filter(r=>!r.ok);
-  $('#testOut').innerHTML=`<div class="advice ${bad.length?'bad':''}" style="font-size:16px"><b>${all.length-bad.length} / ${all.length} نجح</b>${bad.length?' — فيه '+bad.length+' فشل':''}</div>`+
-    all.map(r=>`<div style="margin:3px 0;color:${r.ok?'var(--ok)':'var(--bad)'}">${r.ok?'✅':'❌'} ${r.name} <span class="mut">${r.detail||''}</span></div>`).join('');
-  window.__testResults=all; return all;
-}
-function sendFault(k){ if(client&&client.connected) client.publish(topic('cmd'),JSON.stringify({fault:k})); else alert('مش متصل بالسيرفر'); }
-if(/[?&]test/.test(location.search)) $('#testPanel').hidden=false;
 
 connect();
 loadHistory();
@@ -916,11 +760,29 @@ loadHistory();
 
 <script>
 // ====================== إعداد Supabase (الصق قيمك هنا) ======================
-const SUPABASE_URL = 'https://yevetvuazfyfunomwpom.supabase.co';          // مثال: https://abcd1234.supabase.co
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlldmV0dnVhemZ5ZnVub213cG9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MDMwOTAsImV4cCI6MjEwNzM3OTA5MH0.79Xly9DUEYq9TDMTaOhS-fCMJErk2apyAbgo1NAMVyw'; // المفتاح العام (anon / publishable) مش الـ service_role
+const SUPABASE_URL = 'PASTE_SUPABASE_URL_HERE';          // مثال: https://abcd1234.supabase.co
+const SUPABASE_ANON_KEY = 'PASTE_SUPABASE_ANON_KEY_HERE'; // المفتاح العام (anon / publishable) مش الـ service_role
 // ============================================================================
 const $a = s => document.querySelector(s);
 const LS = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+// ---------- المظهر + صفحة الإعدادات + الإشعارات ----------
+function openSettings(){ $a('#settingsPage').hidden=false; document.body.style.overflow='hidden'; syncNotifUI(); }
+function closeSettings(){ $a('#settingsPage').hidden=true; document.body.style.overflow=''; }
+function applyTheme(t,redraw){
+  document.documentElement.dataset.theme=t; LS.set('sea-theme',t);
+  document.querySelectorAll('.sw').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  if(redraw){ if(typeof drawChart==='function') drawChart(); if(typeof loadHistory==='function') loadHistory(); }
+}
+applyTheme(LS.get('sea-theme')||'mint');
+function syncNotifUI(){
+  const ok=('Notification' in window), p=ok?Notification.permission:'denied';
+  $a('#notifOn').checked = ok && p==='granted' && LS.get('sea-notif')==='1';
+  $a('#notifInfo').textContent = !ok ? 'متصفحك مابيدعمش الإشعارات.' : p==='denied' ? 'الإشعارات ممنوعة من إعدادات المتصفح — فعّلها من هناك.' : '';
+}
+async function toggleNotif(on){
+  if(on){ const p=await Notification.requestPermission(); on = p==='granted'; }
+  LS.set('sea-notif', on?'1':'0'); syncNotifUI();
+}
 const CONFIGURED = !/PASTE_/.test(SUPABASE_URL+SUPABASE_ANON_KEY) && typeof supabase!=='undefined';
 const sb = CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {auth:{persistSession:true,autoRefreshToken:true}}) : null;
 let currentUser = null, started = false;
@@ -994,7 +856,7 @@ async function startFor(user){
     return authMsg('ماقدرتش أحمّل إعداداتك من السيرفر ('+(e.message||e)+'). جرّب تاني.','err');
   }
   $a('#auth').hidden=true;
-  if(user){ const b=$a('#userBtn'); b.textContent='خروج ('+user.email+')'; b.hidden=false; }
+  if(user){ const b=$a('#userBtn'); b.textContent='خروج ('+user.email+')'; b.hidden=false; const na=$a('#noAcc'); if(na) na.hidden=true; }
   else setCloud('⚠️ من غير حساب: الإعدادات محفوظة في المتصفح ده بس');
   const s=document.createElement('script'); s.textContent=$a('#main-src').textContent; document.body.appendChild(s);
   loadSnapshot();
@@ -1034,8 +896,8 @@ async function loadHistory(){
   g.font='12px Tahoma'; g.textAlign='center';
   days.forEach((d,i)=>{
     const hh=d.v/max*(H-40), x=i*bw+bw*0.15, w=bw*0.7;
-    g.fillStyle='#38bdf8'; g.fillRect(x,H-22-hh,w,hh);
-    g.fillStyle='#94a3b8'; g.fillText(d.v>0?d.v.toFixed(1):'',x+w/2,H-26-hh);
+    g.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--accd').trim(); g.fillRect(x,H-22-hh,w,hh);
+    g.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--mut').trim(); g.fillText(d.v>0?d.v.toFixed(1):'',x+w/2,H-26-hh);
     g.fillText(d.k.slice(8),x+w/2,H-6);
   });
   const tot=days.reduce((a,d)=>a+d.v,0), act=days.filter(d=>d.v>0).length;
