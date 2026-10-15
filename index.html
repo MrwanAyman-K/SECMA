@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SECMA</title>
+<title>مستشار الطاقة الذكي</title>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('sea-theme')||'mint'}catch(e){}</script>
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -90,14 +90,12 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
 [hidden]{display:none!important}
 @media(max-width:520px){.hero-num{font-size:34px}.dbars,.hero-sub{grid-template-columns:1fr}}
 
-.pj-note{margin-top:12px}
-.pj-note>div{margin:4px 0}
 </style>
 </head>
 <body>
 <div id="auth">
   <div class="box card">
-    <h1>⚡ SECMA</h1>
+    <h1>⚡ مستشار الطاقة الذكي</h1>
     <div class="mut" id="authSub">سجّل دخول عشان إعداداتك وسجل استهلاكك يتحفظوا على حسابك.</div>
     <div id="authForm">
       <input id="aEmail" type="email" placeholder="الإيميل" autocomplete="email" dir="ltr">
@@ -117,7 +115,7 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
 <header class="top">
   <div class="brand">
     <div class="logo">⚡</div>
-    <div><h1>SECMA</h1>
+    <div><h1>مستشار الطاقة الذكي</h1>
       <div class="status"><span id="dot" class="dot"></span><span id="conn">غير متصل</span><span>·</span><span>الجهاز: <span id="devstat">--</span></span><span id="cloud"></span></div></div>
   </div>
   <button class="sec" onclick="openSettings()">⚙️ الإعدادات</button>
@@ -170,24 +168,6 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
   </div>
 </section>
 
-<section class="card" id="projCard">
-  <div class="hero-top">
-    <div>
-      <div class="lbl">🧾 توقع آخر الدورة بمتوسط استهلاكك اليومي</div>
-      <div class="hero-num"><span id="pjKwh">--</span><span class="of"> kWh</span></div>
-      <div class="mut" id="pjRange"></div>
-    </div>
-    <div class="pill" id="pjTier">--</div>
-  </div>
-  <div class="hero-sub">
-    <div><span class="lbl">متوسط الاستهلاك اليومي</span><b><span id="pjRate">--</span> kWh</b></div>
-    <div><span class="lbl">الفاتورة المتوقعة آخر الدورة</span><b><span id="pjBill">--</span> جنيه</b></div>
-    <div><span class="lbl">الفاتورة لحد دلوقتي</span><b><span id="pjNow">--</span> جنيه</b></div>
-    <div><span class="lbl">سعر آخر كيلووات دلوقتي</span><b><span id="pjMarg">--</span> جنيه</b></div>
-  </div>
-  <div class="pj-note mut" id="pjNote"></div>
-</section>
-
 <div class="card"><h2>⚡ آخر دقايق (السحب اللحظي)</h2>
   <canvas id="chart" width="900" height="120"></canvas>
 </div>
@@ -224,10 +204,6 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
       <label>بداية الدورة <input id="cycle" type="date"></label>
       <label>أيام الدورة <input id="days" type="number" min="28" max="35"></label>
       <label>حدود الشرايح kWh (بفاصلة) <input id="tiers" style="width:230px;max-width:100%"></label>
-      <label>سعر الكيلووات لكل شريحة (جنيه) <input id="prices" style="width:300px;max-width:100%" dir="ltr"></label>
-      <label>رسوم خدمة العملاء لكل شريحة (جنيه) <input id="fees" style="width:230px;max-width:100%" dir="ltr"></label>
-      <button class="sec" onclick="resetTariff()">↺ أسعار أغسطس 2026</button>
-      <div class="mut" style="flex-basis:100%">الأسعار الافتراضية من تعريفة أغسطس 2026 (المصادر مختلفة في سعر الشريحة السابعة: 2.74 أو 2.89). راجعها على فاتورتك. الحساب تصاعدي لحد آخر حد، وفوقه كل الاستهلاك بيتحاسب بسعر الشريحة الأخيرة.</div>
     </div>
     <div class="row" style="margin-top:10px">
       <button onclick="saveSettings();closeSettings()">حفظ</button>
@@ -255,7 +231,10 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
     <div class="mut" id="alwaysInfo" style="margin-top:8px"></div></section>
 
   <section class="card"><h2>🔗 ربط الجهاز</h2>
-    <label>كود جهازك (SITE_ID) <input id="site" style="width:100%"></label>
+    <label>كود جهازك (SITE_ID) <input id="site" style="width:100%" dir="ltr"></label>
+    <div class="mut" style="margin:6px 0">انسخ الكود ده في الفيرموير (SITE_ID). ولأمان أعلى استخدم broker خاص (HiveMQ Cloud مثلًا) بيوزر وباسورد.</div>
+    <div class="row"><label style="flex:1">رابط الـ broker (wss) <input id="murl" style="width:100%" dir="ltr" placeholder="wss://xxxx.s1.eu.hivemq.cloud:8884/mqtt"></label>
+      <label>يوزر <input id="muser" autocomplete="off" dir="ltr"></label><label>باسورد <input id="mpass" type="password" autocomplete="new-password" dir="ltr"></label></div>
     <div style="margin-top:10px"><button onclick="saveSettings();closeSettings()">حفظ وإعادة الاتصال</button></div></section>
 
   <section class="card"><h2>👤 الحساب</h2>
@@ -396,35 +375,6 @@ function savingsPlan(kind,P,devRate,daysLeft,proj,cap,tiers){
   }
   return o;
 }
-// ---------- التكلفة: تعريفة الكهرباء المنزلي ----------
-// حتى آخر حد (1000): الحساب تصاعدي، كل شريحة على الكيلووات اللي فيها بس. فوقه: كل الاستهلاك بسعر آخر شريحة. + رسوم خدمة العملاء حسب الشريحة.
-const TARIFF_DEFAULT = {prices:[0.68,0.87,1.06,1.74,2.18,2.35,2.74], fees:[3,6,12,20,50,60,100]};
-const pick=(a,i)=>(a&&a.length)?a[Math.min(i,a.length-1)]:0;
-function tierIdx(used,tiers){ let i=0; while(i<tiers.length && used>tiers[i]) i++; return i; }   // 0-based. الحد نفسه (مثلاً 50) تابع للشريحة اللي بتنتهي عنده
-function billFor(kwh,tiers,prices,fees){
-  if(!(kwh>0)) return {total:0,energy:0,fee:0,tier:0,marginal:pick(prices,0)};
-  const n=tiers.length, ti=tierIdx(kwh,tiers); let energy=0;
-  if(ti===n) energy=kwh*pick(prices,n);
-  else { let lo=0; for(let i=0;i<=ti;i++){ const hi=Math.min(kwh,tiers[i]); energy+=(hi-lo)*pick(prices,i); lo=hi; } }
-  const fee=pick(fees,ti);
-  return {total:energy+fee, energy, fee, tier:ti, marginal:pick(prices,ti)};
-}
-// تذبذب الاستهلاك اليومي من السجل (أيام كاملة بس)
-function dailyStats(vals){
-  const v=vals.filter(x=>x>0); if(v.length<3) return null;
-  const m=v.reduce((a,b)=>a+b,0)/v.length, sd=Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/(v.length-1));
-  return {mean:m,sd,n:v.length};
-}
-// المتوقع آخر الدورة = المستهلك + معدل يومي × الأيام الباقية. المدى: المعدل ± sd (لو فيه سجل كفاية) أو ± BAND من المعدل
-const FC={BAND:0.2};
-function projectCycle(used,rate,left,sd,tiers,prices,fees){
-  if(rate==null||!isFinite(rate)) return null;
-  const band=sd!=null?sd:rate*FC.BAND, at=r=>used+Math.max(0,r)*Math.max(0,left);
-  const mid=at(rate), lo=at(rate-band), hi=at(rate+band);
-  return {mid,lo,hi,band,fromHistory:sd!=null,
-    billMid:billFor(mid,tiers,prices,fees), billLo:billFor(lo,tiers,prices,fees), billHi:billFor(hi,tiers,prices,fees),
-    tierMid:tierIdx(mid,tiers), tierLo:tierIdx(lo,tiers), tierHi:tierIdx(hi,tiers)};
-}
 // </logic>
 </script>
 <script type="text/plain" id="main-src">
@@ -465,7 +415,7 @@ const store = ()=>persistCfg(cfg);
 cfg.env ||= {out:38, inlet:20};
 if(cfg.env.room0==null) cfg.env.room0=30;
 cfg.tiers ||= TIERS_DEFAULT.slice();
-cfg.prices ||= TARIFF_DEFAULT.prices.slice(); cfg.fees ||= TARIFF_DEFAULT.fees.slice();
+cfg.mqtt ||= {url:'wss://broker.hivemq.com:8884/mqtt',user:'',pass:''};
 const SETDEF = {ac1:24, ac2:24, heater1:55, heater2:55, washer:40};
 const AREADEF = {ac1:20, ac2:36};
 DEVS.forEach(d=>{ if(SETDEF[d.id]!=null && cfg.devs[d.id].set==null) cfg.devs[d.id].set=SETDEF[d.id]; if(AREADEF[d.id]!=null && cfg.devs[d.id].area==null) cfg.devs[d.id].area=AREADEF[d.id]; });
@@ -504,18 +454,14 @@ DEVS.forEach(d=>{
   if($('#ar-'+d.id)){ $('#ar-'+d.id).value=cfg.devs[d.id].area; $('#ar-'+d.id).onchange=e=>{cfg.devs[d.id].area=+e.target.value; pushConfig(); if(lastState) render(lastState);}; }
   if($('#s-'+d.id)){ $('#s-'+d.id).value=cfg.devs[d.id].set; $('#s-'+d.id).onchange=e=>{cfg.devs[d.id].set=+e.target.value; pushConfig(); if(lastState) render(lastState);}; }
 });
-$('#site').value=cfg.site; $('#cap').value=cfg.cap; $('#cycle').value=cfg.cycle; $('#days').value=cfg.days;
-$('#tiers').value=cfg.tiers.join(','); $('#prices').value=cfg.prices.join(','); $('#fees').value=cfg.fees.join(',');
+$('#site').value=cfg.site; $('#murl').value=cfg.mqtt.url; $('#muser').value=cfg.mqtt.user; $('#mpass').value=cfg.mqtt.pass; $('#cap').value=cfg.cap; $('#cycle').value=cfg.cycle; $('#days').value=cfg.days;
+$('#tiers').value=cfg.tiers.join(',');
 $('#tout').value=cfg.env.out; $('#tin').value=cfg.env.inlet;
 $('#tout').onchange=e=>{cfg.env.out=+e.target.value; pushConfig(); if(lastState) render(lastState);};
 $('#tin').onchange =e=>{cfg.env.inlet=+e.target.value; pushConfig(); if(lastState) render(lastState);};
 $('#troom0').value=cfg.env.room0;
 $('#troom0').onchange=e=>{cfg.env.room0=+e.target.value; pushConfig(); if(lastState) render(lastState);};
 $('#tiers').onchange=e=>{ const a=e.target.value.split(',').map(Number).filter(n=>n>0).sort((x,y)=>x-y); if(a.length){cfg.tiers=a; store(); if(lastState) render(lastState);} };
-const parseList=v=>v.split(',').map(x=>x.trim()).filter(x=>x!=='').map(Number).filter(n=>isFinite(n)&&n>=0);
-$('#prices').onchange=e=>{ const a=parseList(e.target.value); if(a.length){cfg.prices=a; store(); if(lastState) render(lastState);} };
-$('#fees').onchange=e=>{ const a=parseList(e.target.value); if(a.length){cfg.fees=a; store(); if(lastState) render(lastState);} };
-function resetTariff(){ cfg.prices=TARIFF_DEFAULT.prices.slice(); cfg.fees=TARIFF_DEFAULT.fees.slice(); $('#prices').value=cfg.prices.join(','); $('#fees').value=cfg.fees.join(','); store(); if(lastState) render(lastState); }
 async function fetchOutdoor(){
   const info=$('#envinfo'); info.textContent='بنجيب الحرارة…';
   let la=30.04, lo=31.24, src='القاهرة (افتراضي)';
@@ -560,7 +506,7 @@ let client, lastState=null, lastSeen=0, series=[], notified={};
 const topic = s => `smartenergy/${cfg.site}/${s}`;
 function connect(){
   if(client) client.end(true);
-  client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt',{reconnectPeriod:3000});
+  const mc=cfg.mqtt||{}; client = mqtt.connect(mc.url||'wss://broker.hivemq.com:8884/mqtt',{reconnectPeriod:3000,username:mc.user||undefined,password:mc.pass||undefined});
   client.on('connect',()=>{ $('#dot').classList.add('on'); $('#conn').textContent='متصل بالسيرفر';
     client.subscribe([topic('state'),topic('status')]); pushConfig(); });
   client.on('close',()=>{ $('#dot').classList.remove('on'); $('#conn').textContent='غير متصل'; });
@@ -577,7 +523,7 @@ function pushConfig(){
   client.publish(topic('config'),JSON.stringify({cap:cfg.cap,devices,env:{out:cfg.env.out,in:cfg.env.inlet,room0:cfg.env.room0},always:alwaysPayload()}),{retain:true});
 }
 function saveSettings(){
-  cfg.site=$('#site').value.trim(); cfg.cap=+$('#cap').value; cfg.cycle=$('#cycle').value; cfg.days=+$('#days').value||30;
+  cfg.site=$('#site').value.trim(); cfg.mqtt={url:$('#murl').value.trim(),user:$('#muser').value.trim(),pass:$('#mpass').value}; cfg.cap=+$('#cap').value; cfg.cycle=$('#cycle').value; cfg.days=+$('#days').value||30;
   store(); connect();
 }
 function resetCounter(){
@@ -699,8 +645,7 @@ function renderSavings(list,f,cap){
   let html=list.map(x=>{ if(x.plan.saveCycle!=null){ tot+=x.plan.saveCycle; any=true; } return `<div class="advice ok">${x.d.icon} ${x.line}</div>`; }).join('');
   if(any && f.proj!=null){
     const p2=Math.max(0,f.proj-tot), a=tierOf(f.proj,cfg.tiers).n, b=tierOf(p2,cfg.tiers).n;
-    const egp=billFor(f.proj,cfg.tiers,cfg.prices,cfg.fees).total-billFor(p2,cfg.tiers,cfg.prices,cfg.fees).total, egpTxt=egp>=1?` (≈ ${Math.round(egp)} جنيه)`:'';
-    html+=`<div class="advice" style="margin-top:10px">📉 <b>لو طبّقت كل الاقتراحات:</b> توفر ≈ <b>${tot.toFixed(1)}</b> kWh لآخر الدورة${egpTxt}، والمتوقع يبقى ≈ <b>${p2.toFixed(0)}</b> kWh بدل ${f.proj.toFixed(0)} — ${b<a?`يعني تنزل للشريحة <b>${b}</b> بدل ${a}`:(f.proj>cap&&p2<=cap?'يعني تبقى <b>تحت حد الشريحة</b>':`وتفضل في الشريحة ${a}`)}.</div>`;
+    html+=`<div class="advice" style="margin-top:10px">📉 <b>لو طبّقت كل الاقتراحات:</b> توفر ≈ <b>${tot.toFixed(1)}</b> kWh لآخر الدورة، والمتوقع يبقى ≈ <b>${p2.toFixed(0)}</b> kWh بدل ${f.proj.toFixed(0)} — ${b<a?`يعني تنزل للشريحة <b>${b}</b> بدل ${a}`:(f.proj>cap&&p2<=cap?'يعني تبقى <b>تحت حد الشريحة</b>':`وتفضل في الشريحة ${a}`)}.</div>`;
   }
   el.innerHTML=html;
 }
@@ -733,35 +678,6 @@ function renderBars(s,f,used,cap,proj){
   const allow=Math.max(0,cap-used)/Math.max(1,f.left); $('#allow').textContent=allow.toFixed(1);
   if(f.rate==null) setBar('#ratebar',0); else { const rp=allow>0?f.rate/allow*100:200; setBar('#ratebar',rp/2,rp>100?'var(--bad)':rp>85?'var(--warn)':'var(--ok)'); }
 }
-// ---------- توقع آخر الدورة: الشريحة المتوقعة + الفاتورة ----------
-function renderProjection(s,f,used){
-  const T=cfg.tiers, P=cfg.prices, F=cfg.fees, set=(id,v)=>{ const e=$('#'+id); if(e) e.textContent=v; };
-  const egp=v=>Math.round(v).toLocaleString('en-US');
-  const now=billFor(used,T,P,F);
-  set('pjNow',egp(now.total)); set('pjMarg',now.marginal.toFixed(2));
-  const st=window.__dailyStats, sd=(st&&st.n>=3)?st.sd:null;
-  const pj=projectCycle(used,f.rate,f.left,sd,T,P,F), note=$('#pjNote');
-  if(!pj){ ['pjKwh','pjRate','pjBill','pjTier'].forEach(i=>set(i,'--')); set('pjRange',''); note.innerHTML='ℹ️ محتاج قراءة الدورة أو شوية وقت قياس علشان أحسب المتوقع.'; return null; }
-  const last=T.length;
-  set('pjKwh',Math.round(pj.mid)); $('#pjKwh').style.color = pj.mid>s.cap?'var(--bad)':'var(--ok)';
-  set('pjRate',f.rate.toFixed(1)); set('pjBill',egp(pj.billMid.total));
-  set('pjTier', pj.tierMid===last ? `الشريحة ${pj.tierMid+1} (الأعلى)` : `الشريحة ${pj.tierMid+1}`);
-  set('pjRange', `ممكن تبقى بين ${Math.round(pj.lo)} و${Math.round(pj.hi)} kWh`+(pj.tierLo!==pj.tierHi?` (يعني الشريحة ${pj.tierLo+1} لـ ${pj.tierHi+1})`:'')+(pj.fromHistory?' · حسب تذبذب استهلاكك اليومي':' · تقدير ±20% لحد ما يتجمّع سجل كفاية'));
-  const parts=[];
-  parts.push(`<div>📐 استهلكت <b>${used.toFixed(0)}</b> kWh + معدلك <b>${f.rate.toFixed(1)}</b> kWh/يوم × <b>${f.left.toFixed(0)}</b> يوم باقي = <b>${Math.round(pj.mid)}</b> kWh.</div>`);
-  parts.push(`<div>🧾 الفاتورة المتوقعة بين <b>${egp(pj.billLo.total)}</b> و<b>${egp(pj.billHi.total)}</b> جنيه (استهلاك + رسوم خدمة العملاء، من غير أي دمغات أو رسوم تانية).</div>`);
-  const fmtD=d=>new Date(Date.now()+d*864e5).toLocaleDateString('ar-EG',{day:'numeric',month:'long'});
-  let crossDate=null;      // تاريخ دخول الشريحة المتوقعة آخر الدورة
-  if(f.rate>0 && pj.tierMid>now.tier){ const d=(T[pj.tierMid-1]-used)/f.rate; if(d>=0 && d<=f.left) crossDate=fmtD(d); }
-  if(now.tier<last){
-    const toNext=T[now.tier]-used, d=f.rate>0?toNext/f.rate:Infinity, nextDate=d<=f.left?fmtD(d):null;
-    parts.push(`<div>⬆️ فاضل <b>${toNext.toFixed(1)}</b> kWh على الشريحة ${now.tier+2} (الكيلووات فيها ${pick(P,now.tier+1).toFixed(2)} جنيه بدل ${now.marginal.toFixed(2)}) — ${nextDate?`هتوصلها حوالي <b>${nextDate}</b>`:'مش هتوصلها بمعدلك الحالي ✅'}.</div>`);
-  }
-  if(pj.hi>T[last-1] && pj.lo<=T[last-1]) parts.push(`<div>⚠️ لو عدّيت ${T[last-1]} kWh كل الاستهلاك بيتحاسب بسعر الشريحة الأخيرة، والفاتورة بتقفز.</div>`);
-  if(P.length!==last+1) parts.push(`<div style="color:var(--warn)">⚠️ عدد الأسعار (${P.length}) مش مطابق لعدد الشرايح (${last+1}). راجع الإعدادات.</div>`);
-  note.innerHTML=parts.join('');
-  return {tierNow:now.tier, tierMid:pj.tierMid, billMid:pj.billMid, crossDate};
-}
 function render(s){
   const used=s.kwh, cap=s.cap, rem=Math.max(0,cap-used);
   $('#pw').textContent=s.p;
@@ -778,7 +694,6 @@ function render(s){
   renderBreakdown(s);
   const totK=(s.dev||[]).reduce((a,x)=>a+(x.kwh||0),0)+(s.bkwh||0)+(s.okwh||0);
   try{ renderBars(s,f,used,cap,proj); }catch(e){ console.error(e); }
-  let pj=null; try{ pj=renderProjection(s,f,used); }catch(e){ console.error(e); }
 
   const top=[];
   if(rem<=0) top.push({lvl:'bad',t:'⛔ عديت حد الشريحة! أي استهلاك زيادة هيتحاسب بسعر أعلى.'});
@@ -787,7 +702,6 @@ function render(s){
   else if(proj!=null) top.push({lvl:'ok',t:`✅ معدلك مناسب: المتوقع ${proj.toFixed(0)} kWh من ${cap}. المتاح يوميًا ${(rem/daysLeft).toFixed(1)} kWh.`});
   else top.push({lvl:'warn',t:'ℹ️ اضغط "ضبط استهلاك الدورة الحالي" وادخل قراءتك علشان التوقع يبقى دقيق.'});
   if(s.unk) top.push({lvl:'warn',t:'في حمل كبير مش متعرّف عليه. راجع الأجهزة المفعّلة، أو ضيف أجهزة الـ 24 ساعة اللي ناقصة.'});
-  if(pj && pj.tierMid>pj.tierNow) top.push({lvl:'warn',t:`🧾 بمعدلك الحالي هتنتقل من الشريحة ${pj.tierNow+1} للشريحة ${pj.tierMid+1}${pj.crossDate?' وهتدخلها حوالي '+pj.crossDate:' آخر الدورة'}، والفاتورة المتوقعة ≈ ${Math.round(pj.billMid.total)} جنيه.`});
 
   const savList=[];
   s.dev.forEach(x=>{
@@ -990,8 +904,6 @@ async function loadHistory(){
     g.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--mut').trim(); g.fillText(d.v>0?d.v.toFixed(1):'',x+w/2,H-26-hh);
     g.fillText(d.k.slice(8),x+w/2,H-6);
   });
-  window.__dailyStats=dailyStats(days.slice(0,-1).map(d=>d.v));   // من غير النهارده (ناقص)
-  try{ if(typeof lastState!=='undefined'&&lastState&&typeof renderProjection==='function') renderProjection(lastState,forecast(lastState),lastState.kwh); }catch(e){}
   const tot=days.reduce((a,d)=>a+d.v,0), act=days.filter(d=>d.v>0).length;
   let last='';
   if(l.data&&l.data[0]){ const m=Math.round((Date.now()-new Date(l.data[0].ts))/60000);
