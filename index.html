@@ -137,6 +137,7 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
     <div><span class="lbl">المتاح يوميًا لباقي الدورة</span><b><span id="perday">--</span> kWh</b></div>
     <div><span class="lbl">💰 فاتورتك لحد دلوقتي</span><b id="costNow">--</b></div>
     <div><span class="lbl">💰 الفاتورة المتوقعة آخر الدورة</span><b id="costProj">--</b></div>
+    <div class="mut" id="lifeLine" style="margin-top:10px"></div>
   </div>
   <div class="lbl" style="margin-top:16px">الشرائح (الخط الأبيض = شريحتك الحالية)</div>
   <div class="tiers" id="tierbar"></div>
@@ -710,6 +711,7 @@ function render(s){
   const f=forecast(s), proj=f.proj, daysLeft=Math.max(1,f.left), projOver=proj!=null&&proj>cap;
   $('#perday').textContent=(rem/daysLeft).toFixed(1);
   const up=unitPrice(used,TR(),PR());
+     { const L=$('#lifeLine'); if(L) L.textContent = s.life!=null ? '📟 إجمالي ما قاسه الجهاز من أول تركيب: '+(+s.life).toFixed(1)+' kWh'+(s.since?' (من '+new Date(s.since*1000).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'})+')':'')+(s.boot?' · عدد مرات التشغيل: '+s.boot:'') : ''; }
   $('#costNow').textContent=egp(billCost(used,TR(),PR()));
   $('#costProj').textContent=proj==null?'--':egp(billCost(proj,TR(),PR()));
   $('#pwcost').textContent='≈ '+egp((s.p||0)/1000*up)+' في الساعة بسعر شريحتك ('+up.toFixed(2)+' جنيه/kWh)';
