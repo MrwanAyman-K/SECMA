@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SECMA</title>
+<title>مستشار الطاقة الذكي</title>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('sea-theme')||'mint'}catch(e){}</script>
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -95,7 +95,7 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
 <body>
 <div id="auth">
   <div class="box card">
-    <h1>⚡ SECMA</h1>
+    <h1>⚡ مستشار الطاقة الذكي</h1>
     <div class="mut" id="authSub">سجّل دخول عشان إعداداتك وسجل استهلاكك يتحفظوا على حسابك.</div>
     <div id="authForm">
       <input id="aEmail" type="email" placeholder="الإيميل" autocomplete="email" dir="ltr">
@@ -115,7 +115,7 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
 <header class="top">
   <div class="brand">
     <div class="logo">⚡</div>
-    <div><h1>SECMA</h1>
+    <div><h1>مستشار الطاقة الذكي</h1>
       <div class="status"><span id="dot" class="dot"></span><span id="conn">غير متصل</span><span>·</span><span>الجهاز: <span id="devstat">--</span></span><span id="cloud"></span></div></div>
   </div>
   <button class="sec" onclick="openSettings()">⚙️ الإعدادات</button>
@@ -136,9 +136,9 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
     <div><span class="lbl">المتبقي للحد</span><b><span id="rem">--</span> kWh</b></div>
     <div><span class="lbl">المتاح يوميًا لباقي الدورة</span><b><span id="perday">--</span> kWh</b></div>
     <div><span class="lbl">💰 فاتورتك لحد دلوقتي</span><b id="costNow">--</b></div>
-    <div><span class="lbl">💰 الفاتورة المتوقعة آخر الدورة</span><b id="costProj">--</b></div>
-    <div class="mut" id="lifeLine" style="margin-top:10px"></div>
+    <div><span class="lbl">💰 الفاتورة المتوقعة آخر الدورة</span><b id="costProj">--</b><span class="lbl" id="costRange"></span></div>
   </div>
+  <div class="mut" id="lifeLine" style="margin-top:10px"></div>
   <div class="lbl" style="margin-top:16px">الشرائح (الخط الأبيض = شريحتك الحالية)</div>
   <div class="tiers" id="tierbar"></div>
   <div class="tier-labels" id="tierlbl"></div>
@@ -182,7 +182,21 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
   <div class="mut" id="histInfo" style="margin-top:6px">السيرفر بيسجّل قراءات جهازك بشكل دوري حتى لو التطبيق مقفول.</div>
 </div>
 
+<div class="card" id="aiCard" hidden><h2>🧠 تحليل ذكي (من تاريخ استهلاكك)</h2><div id="aiBody" class="mut">في انتظار التحليل…</div></div>
+
+<div class="card" id="chatCard" hidden><h2>💬 اسأل المساعد</h2>
+  <div id="chatLog" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+  <div class="row" id="chatQuick" style="margin-bottom:8px">
+    <button class="sec" onclick="askAI('فاتورتي هتبقى كام آخر الدورة؟')">فاتورتي هتبقى كام؟</button>
+    <button class="sec" onclick="askAI('أنهي جهاز بيستهلك أكتر؟')">مين بيستهلك أكتر؟</button>
+    <button class="sec" onclick="askAI('إزاي أوفّر في الفاتورة؟')">إزاي أوفّر؟</button>
+    <button class="sec" onclick="askAI('هعدّي حد الشريحة؟')">هعدّي الشريحة؟</button></div>
+  <div class="row"><input id="chatIn" style="flex:1;min-width:180px" maxlength="500" placeholder="اكتب سؤالك عن استهلاكك…" onkeydown="if(event.key==='Enter')askAI()"><button id="chatBtn" onclick="askAI()">إرسال</button></div>
+  <div class="mut" id="chatInfo" style="margin-top:6px">المساعد المجاني بيجاوب من بياناتك بقواعد جاهزة (الفاتورة، الشريحة، مين بيستهلك، التوفير). ولو ضفت رابط خدمة brain ومفتاح AI بيتحوّل لمساعد بيفهم أي سؤال. إجاباته تقديرات.</div></div>
+
 <div class="card"><h2>📊 توزيع الاستهلاك المقاس (من آخر ضبط)</h2><div id="breakdown" class="mut">في انتظار البيانات…</div></div>
+
+<div class="card" id="evCard" hidden><h2>🧠 تعلّم أجهزتك</h2><div id="evList"></div><div class="mut" id="evInfo" style="margin-top:8px"></div></div>
 
 <div class="card" id="top"><h2>💡 نصائح دلوقتي</h2><div id="topAdvice" class="mut">في انتظار البيانات…</div></div>
 
@@ -215,6 +229,7 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
     <div class="row" style="margin-top:10px">
       <button onclick="saveSettings();closeSettings()">حفظ</button>
       <button class="sec" onclick="resetCounter()">ضبط استهلاك الدورة الحالي</button>
+      <button class="sec" onclick="calibrate()">⚖️ معايرة الجهاز من عدّاد الكهرباء</button>
     </div></section>
 
   <section class="card"><h2>🌡️ الجو</h2>
@@ -242,6 +257,7 @@ canvas{width:100%;height:120px;background:var(--soft);border-radius:10px}
     <div class="mut" style="margin:6px 0">انسخ الكود ده في الفيرموير (SITE_ID). ولأمان أعلى استخدم broker خاص (HiveMQ Cloud مثلًا) بيوزر وباسورد.</div>
     <div class="row"><label style="flex:1">رابط الـ broker (wss) <input id="murl" style="width:100%" dir="ltr" placeholder="wss://xxxx.s1.eu.hivemq.cloud:8884/mqtt"></label>
       <label>يوزر <input id="muser" autocomplete="off" dir="ltr"></label><label>باسورد <input id="mpass" type="password" autocomplete="new-password" dir="ltr"></label></div>
+    <label style="margin-top:8px">رابط خدمة التحليل والمساعد (brain) <input id="burl" style="width:100%" dir="ltr" placeholder="https://xxxx.up.railway.app"></label>
     <div style="margin-top:10px"><button onclick="saveSettings();closeSettings()">حفظ وإعادة الاتصال</button></div></section>
 
   <section class="card"><h2>👤 الحساب</h2>
@@ -270,6 +286,7 @@ function billCost(kwh,tiers,prices){            // تكلفة تراكمية ع�
 function unitPrice(kwh,tiers,prices){            // سعر الكيلووات الجاي (في الشريحة الحالية)
   let i=0; while(i<tiers.length && kwh>=tiers[i]) i++; return prices[i]!=null?prices[i]:prices[prices.length-1];
 }
+const egpRange = (a,b) => (a==null||b==null||!isFinite(a)||!isFinite(b)) ? '--' : (Math.abs(b-a)<2 ? egp((a+b)/2) : Math.round(a).toLocaleString('en-US')+' – '+Math.round(b).toLocaleString('en-US')+' جنيه');
 const egp = x => (x==null||!isFinite(x)) ? '--' : (x<10 ? x.toFixed(2) : Math.round(x).toLocaleString('en-US'))+' جنيه';            // حدود شرائح الكهرباء المنزلي (kWh/شهر)
 const JUDGE = {AC_MIN_SEC:1200, TOL_DUTY:.10, MARGIN_X:1.25, MARGIN_S:180};
 const clampN=(x,a,b)=>Math.min(b,Math.max(a,x));
@@ -476,7 +493,7 @@ DEVS.forEach(d=>{
   if($('#ar-'+d.id)){ $('#ar-'+d.id).value=cfg.devs[d.id].area; $('#ar-'+d.id).onchange=e=>{cfg.devs[d.id].area=+e.target.value; pushConfig(); if(lastState) render(lastState);}; }
   if($('#s-'+d.id)){ $('#s-'+d.id).value=cfg.devs[d.id].set; $('#s-'+d.id).onchange=e=>{cfg.devs[d.id].set=+e.target.value; pushConfig(); if(lastState) render(lastState);}; }
 });
-$('#site').value=cfg.site; $('#murl').value=cfg.mqtt.url; $('#muser').value=cfg.mqtt.user; $('#mpass').value=cfg.mqtt.pass; $('#cap').value=cfg.cap; $('#cycle').value=cfg.cycle; $('#days').value=cfg.days;
+$('#site').value=cfg.site; $('#murl').value=cfg.mqtt.url; $('#muser').value=cfg.mqtt.user; $('#mpass').value=cfg.mqtt.pass; $('#burl').value=cfg.brainUrl||''; $('#cap').value=cfg.cap; $('#cycle').value=cfg.cycle; $('#days').value=cfg.days;
 $('#tiers').value=cfg.tiers.join(',');
 $('#prices').value=cfg.prices.join(',');
 $('#prices').onchange=e=>{ const a=e.target.value.split(',').map(Number).filter(n=>n>=0&&isFinite(n)); if(a.length){cfg.prices=a; store(); if(lastState) render(lastState);} };
@@ -532,10 +549,11 @@ function connect(){
   if(client) client.end(true);
   const mc=cfg.mqtt||{}; client = mqtt.connect(mc.url||'wss://broker.hivemq.com:8884/mqtt',{reconnectPeriod:3000,username:mc.user||undefined,password:mc.pass||undefined});
   client.on('connect',()=>{ $('#dot').classList.add('on'); $('#conn').textContent='متصل بالسيرفر';
-    client.subscribe([topic('state'),topic('status')]); pushConfig(); });
+    client.subscribe([topic('state'),topic('status'),topic('events')]); pushConfig(); });
   client.on('close',()=>{ $('#dot').classList.remove('on'); $('#conn').textContent='غير متصل'; });
   client.on('message',(t,m)=>{
     const s=m.toString();
+    if(t===topic('events')){ try{ onEvent(JSON.parse(s)); }catch(e){} return; }
     if(t===topic('status')){ $('#devstat').textContent = s==='online'?'متصل ✅':'غير متصل ❌'; return; }
     try{ lastState=JSON.parse(s); lastSeen=Date.now(); render(lastState); const sbn=$('#snapBanner'); if(sbn) sbn.hidden=true; }catch(e){}
   });
@@ -543,17 +561,17 @@ function connect(){
 function pushConfig(){
   store();
   if(!client||!client.connected) return;
-  const devices = {}; DEVS.forEach(d=>devices[d.id]={on:cfg.devs[d.id].on,w:Math.round(watts(d)),val:cfg.devs[d.id].val,set:cfg.devs[d.id].set,area:cfg.devs[d.id].area});
+  const devices = {}; DEVS.forEach(d=>devices[d.id]={on:cfg.devs[d.id].on,w:Math.round(cfg.devs[d.id].learnW||watts(d)),pf:cfg.devs[d.id].learnPF,val:cfg.devs[d.id].val,set:cfg.devs[d.id].set,area:cfg.devs[d.id].area});
   client.publish(topic('config'),JSON.stringify({cap:cfg.cap,devices,env:{out:cfg.env.out,in:cfg.env.inlet,room0:cfg.env.room0},always:alwaysPayload()}),{retain:true});
 }
 function saveSettings(){
-  cfg.site=$('#site').value.trim(); cfg.mqtt={url:$('#murl').value.trim(),user:$('#muser').value.trim(),pass:$('#mpass').value}; cfg.cap=+$('#cap').value; cfg.cycle=$('#cycle').value; cfg.days=+$('#days').value||30;
+  cfg.site=$('#site').value.trim(); cfg.mqtt={url:$('#murl').value.trim(),user:$('#muser').value.trim(),pass:$('#mpass').value}; cfg.brainUrl=$('#burl').value.trim().replace(/\/+$/,''); cfg.cap=+$('#cap').value; cfg.cycle=$('#cycle').value; cfg.days=+$('#days').value||30;
   store(); connect();
 }
 function resetCounter(){
   const v = prompt('استهلكت كام kWh من أول الدورة لحد دلوقتي؟ (من فاتورتك أو عداد الكهرباء)', lastState?lastState.kwh.toFixed(1):'0');
   if(v===null || isNaN(+v)) return;
-  client.publish(topic('cmd'),JSON.stringify({kwh:+v}));
+  client.publish(topic('cmd'),JSON.stringify({kwh:+v})); cfg.calRef={kwh:+v}; store();
 }
 
 // ---------- حساب المستهلك والمتوقع ----------
@@ -574,7 +592,14 @@ function forecast(s){
   const proj = rate==null ? null : used + rate*left;
   let capDate=null;
   if(rate>0 && used<s.cap){ const d=(s.cap-used)/rate; if(d<=left) capDate=new Date(Date.now()+d*DAY); }
-  return {elapsed,left,rate,proj,capDate,hrs,w,hasHist:histRate!=null};
+  // نطاق التوقع: بين تقديري المعدل (القياس والتاريخ). لو واحد بس موجود هامش ±20%، ولو الاتنين ±5% كحد أدنى. بيضيق مع الوقت (أيام باقية أقل)
+  let projLo=null, projHi=null;
+  if(rate!=null){
+    const c=[measRate,histRate].filter(x=>x!=null), pad=c.length>1?0.05:0.20;
+    const lo=Math.min(Math.min(...c),rate*(1-pad)), hi=Math.max(Math.max(...c),rate*(1+pad));
+    projLo=used+Math.max(0,lo)*left; projHi=used+hi*left;
+  }
+  return {elapsed,left,rate,proj,projLo,projHi,capDate,hrs,w,hasHist:histRate!=null};
 }
 function renderBreakdown(s){
   const cn=cycNames();
@@ -711,11 +736,14 @@ function render(s){
   const f=forecast(s), proj=f.proj, daysLeft=Math.max(1,f.left), projOver=proj!=null&&proj>cap;
   $('#perday').textContent=(rem/daysLeft).toFixed(1);
   const up=unitPrice(used,TR(),PR());
-     { const L=$('#lifeLine'); if(L) L.textContent = s.life!=null ? '📟 إجمالي ما قاسه الجهاز من أول تركيب: '+(+s.life).toFixed(1)+' kWh'+(s.since?' (من '+new Date(s.since*1000).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'})+')':'')+(s.boot?' · عدد مرات التشغيل: '+s.boot:'') : ''; }
+  { const L=$('#lifeLine'); if(L) L.textContent = s.life!=null ? '📟 إجمالي ما قاسه الجهاز من أول تركيب: '+(+s.life).toFixed(1)+' kWh'+(s.since?' (من '+new Date(s.since*1000).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'})+')':'')+(s.boot?' · عدد مرات التشغيل: '+s.boot:'') : ''; }
   $('#costNow').textContent=egp(billCost(used,TR(),PR()));
   $('#costProj').textContent=proj==null?'--':egp(billCost(proj,TR(),PR()));
+  { const lo=f.projLo!=null?billCost(f.projLo,TR(),PR()):null, hi=f.projHi!=null?billCost(f.projHi,TR(),PR()):null;
+    const cr=$('#costRange'); if(cr) cr.textContent = lo==null ? '' : 'النطاق المتوقع: '+egpRange(lo,hi)+' · '+Math.round(f.projLo)+'–'+Math.round(f.projHi)+' kWh';
+    window.__rng = lo==null ? '' : egpRange(lo,hi); }
   $('#pwcost').textContent='≈ '+egp((s.p||0)/1000*up)+' في الساعة بسعر شريحتك ('+up.toFixed(2)+' جنيه/kWh)';
-  $('#projcost').textContent=proj==null?'':'فاتورة متوقعة ≈ '+egp(billCost(proj,TR(),PR()));
+  $('#projcost').textContent=proj==null?'':'فاتورة متوقعة ≈ '+egp(billCost(proj,TR(),PR()))+(window.__rng?' (من '+window.__rng.replace(' – ',' لـ ')+')':'');
   $('#elapsed').textContent=f.elapsed.toFixed(1); $('#left').textContent=f.left.toFixed(1);
   $('#rate').textContent=f.rate==null?'--':f.rate.toFixed(1);
   $('#proj').textContent=proj==null?'--':proj.toFixed(0);
@@ -729,7 +757,7 @@ function render(s){
   if(rem<=0) top.push({lvl:'bad',t:'⛔ عديت حد الشريحة! أي استهلاك زيادة هيتحاسب بسعر أعلى.'});
   else if(rem<30) top.push({lvl:'bad',t:`⚠️ فاضل ${rem.toFixed(1)} kWh بس على حد الشريحة. أجّل الأحمال الكبيرة.`});
   else if(projOver) top.push({lvl:'warn',t:`📈 بمعدلك الحالي (${f.rate.toFixed(1)} kWh/يوم) هتوصل ${proj.toFixed(0)} kWh آخر الدورة (الحد ${cap})${f.capDate?'، وهتعدّي الحد حوالي '+f.capDate.toLocaleDateString('ar-EG',{day:'numeric',month:'long'}):''}. لازم تقلل لـ ${(rem/daysLeft).toFixed(1)} kWh/يوم.`});
-  else if(proj!=null) top.push({lvl:'ok',t:`✅ معدلك مناسب: المتوقع ${proj.toFixed(0)} kWh من ${cap} (≈ ${egp(billCost(proj,TR(),PR()))}). المتاح يوميًا ${(rem/daysLeft).toFixed(1)} kWh.`});
+  else if(proj!=null) top.push({lvl:'ok',t:`✅ معدلك مناسب: المتوقع ${proj.toFixed(0)} kWh من ${cap} (≈ ${egp(billCost(proj,TR(),PR()))}).${f.projHi>cap?` لكن في أسوأ تقدير (${f.projHi.toFixed(0)} kWh) ممكن تعدّي الحد.`:''} المتاح يوميًا ${(rem/daysLeft).toFixed(1)} kWh.`});
   else top.push({lvl:'warn',t:'ℹ️ اضغط "ضبط استهلاك الدورة الحالي" وادخل قراءتك علشان التوقع يبقى دقيق.'});
   if(s.unk) top.push({lvl:'warn',t:'في حمل كبير مش متعرّف عليه. راجع الأجهزة المفعّلة، أو ضيف أجهزة الـ 24 ساعة اللي ناقصة.'});
 
@@ -787,6 +815,49 @@ function drawChart(){
 }
 function notify(t,b){ if(window.__snap||LS.get('sea-notif')!=='1') return; if('Notification' in window && Notification.permission==='granted') new Notification(t,{body:b}); }
 setInterval(()=>{ if(lastSeen && Date.now()-lastSeen>8000) $('#devstat').textContent='مفيش بيانات ❌'; },3000);
+
+// ---------- معايرة من العدّاد + تعلّم أجهزتك من الأحداث (بتأكيدك) ----------
+cfg.sig ||= {};
+let evs=[];
+const med=a=>{const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;};
+function onEvent(e){
+  const d=DEVS.find(q=>q.id===e.id); if(!d||e.mode!==1||!(e.w>=100)) return;
+  evs.push({id:e.id,w:e.w,q:e.q||0}); if(evs.length>8) evs.shift(); renderEvents();
+}
+function evLearn(i,id){
+  const e=evs[i]; if(!e) return;
+  const S=(cfg.sig[id] ||= {p:[],f:[]});
+  S.p.push(e.w); S.f.push(+(e.w/Math.hypot(e.w,e.q)).toFixed(3));
+  if(S.p.length>20){S.p.shift();S.f.shift();}
+  if(S.p.length>=3){ cfg.devs[id].learnW=Math.round(med(S.p)); cfg.devs[id].learnPF=Math.min(1,Math.max(.3,+med(S.f).toFixed(2))); }
+  evs.splice(i,1); pushConfig(); renderEvents(); if(lastState) render(lastState);
+}
+function evSkip(i){ evs.splice(i,1); renderEvents(); }
+function evFix(i){ evLearn(i,$('#evs-'+i).value); }
+function resetLearning(){
+  if(!confirm('مسح كل اللي اتعلّمه الجهاز عن أجهزتك؟')) return;
+  cfg.sig={}; DEVS.forEach(d=>{delete cfg.devs[d.id].learnW; delete cfg.devs[d.id].learnPF;}); pushConfig(); renderEvents();
+}
+function renderEvents(){
+  $('#evCard').hidden=false;
+  const nm=id=>(DEVS.find(q=>q.id===id)||{}).name||id;
+  const opts=DEVS.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  $('#evList').innerHTML = evs.length ? evs.map((e,i)=>`<div class="advice">${nm(e.id)} اشتغل لوحده بسحب ${e.w} واط. هل ده صح؟<div class="row" style="margin-top:6px"><button onclick="evLearn(${i},'${e.id}')">✅ صح</button><select id="evs-${i}">${opts}</select><button class="sec" onclick="evFix(${i})">لا، ده الجهاز اللي اخترته</button><button class="sec" onclick="evSkip(${i})">تجاهل</button></div></div>`).join('') : '<span class="mut">لما جهاز يشتغل لوحده هسألك تأكد إنه هو. كل تأكيد بيخلي التعرّف أدق (بعد 3 تأكيدات للجهاز بيبدأ يتعلم).</span>';
+  const L=DEVS.filter(d=>cfg.devs[d.id].learnW).map(d=>`${d.name}: ${cfg.devs[d.id].learnW} واط (PF ${cfg.devs[d.id].learnPF}) من ${((cfg.sig[d.id]||{p:[]}).p).length} عينة`);
+  $('#evInfo').innerHTML = L.length ? '<b>اتعلّم لحد دلوقتي:</b> '+L.join(' · ')+' <button class="sec" onclick="resetLearning()">مسح</button>' : '';
+}
+function calibrate(){
+  if(!lastState||lastState.cal==null) return alert('الجهاز لازم يكون متصل وبيبعت، وبالفيرموير الجديد.');
+  if(!cfg.calRef) return alert('الأول اضغط "ضبط استهلاك الدورة الحالي" وادخل قراءة العدّاد، واستنى الجهاز يقيس أكتر من 1 كيلووات، وبعدين اضغط معايرة.');
+  const meas=+lastState.meas; if(!(meas>=1)) return alert('الجهاز قاس '+meas.toFixed(2)+' kWh بس. استنى لحد ما يقيس 1 كيلووات على الأقل.');
+  const v=prompt('قراءة عدّاد الكهرباء دلوقتي (kWh):'); if(v===null||isNaN(+v)) return;
+  const truth=+v-cfg.calRef.kwh; if(!(truth>0)) return alert('القراءة لازم تكون أكبر من قراءة الضبط ('+cfg.calRef.kwh+').');
+  const nc=Math.min(2,Math.max(.5,(+lastState.cal||1)*truth/meas));
+  if(!confirm('الجهاز قاس '+meas.toFixed(2)+' kWh والعدّاد قاس '+truth.toFixed(2)+' kWh.\nمعامل التصحيح هيتغيّر من '+(+lastState.cal).toFixed(3)+' لـ '+nc.toFixed(3)+'. موافق؟')) return;
+  client.publish(topic('cmd'),JSON.stringify({cal:nc}));
+  setTimeout(()=>{ client.publish(topic('cmd'),JSON.stringify({kwh:+v})); cfg.calRef={kwh:+v}; store(); },600);
+}
+renderEvents();
 
 connect();
 loadHistory();
@@ -893,6 +964,7 @@ async function startFor(user){
   if(user){ const b=$a('#userBtn'); b.textContent='خروج ('+user.email+')'; b.hidden=false; const na=$a('#noAcc'); if(na) na.hidden=true; }
   else setCloud('⚠️ من غير حساب: الإعدادات محفوظة في المتصفح ده بس');
   const s=document.createElement('script'); s.textContent=$a('#main-src').textContent; document.body.appendChild(s);
+  $a('#chatCard').hidden=false;
   loadSnapshot();
 }
 // آخر حالة محفوظة للجهاز (بيحدّثها الـ Recorder): بتظهر فورًا لحد ما أول قراءة حية توصل
@@ -909,13 +981,97 @@ async function loadSnapshot(){
   }catch(e){ console.error('snapshot:',e); }
 }
 
+// ---------- التحليل الذكي (بتكتبه خدمة brain على السيرفر في جدول insights) ----------
+async function loadInsights(){
+  const card=$a('#aiCard'), el=$a('#aiBody'); if(!sb||!currentUser||!card) return;
+  const {data,error}=await sb.from('insights').select('data,updated_at').maybeSingle();
+  if(error){ card.hidden=true; return; }                 // الجدول لسه مش متعمل
+  card.hidden=false;
+  if(!data){ el.innerHTML='<span class="mut">خدمة التحليل لسه ما حلّلتش بياناتك (بتشتغل كل ساعة تقريبًا).</span>'; return; }
+  const d=data.data||{}, m=Math.round((Date.now()-new Date(data.updated_at))/60000);
+  let h=`<div class="mut">آخر تحليل: ${m<90?'من '+m+' دقيقة':'من '+(m/60).toFixed(1)+' ساعة'} · بيانات ${d.hoursCovered||0} ساعة من ${d.daysCovered||0} يوم</div>`;
+  if(d.status!=='ok'){ el.innerHTML=h+`<div class="advice warn">${d.message||'مفيش بيانات كفاية.'}</div>`; return; }
+  const f=d.forecast;
+  if(f) h+=`<div class="advice">🔮 <b>توقع آخر الدورة (متعلَّم من نمط ساعات يومك):</b> ≈ <b>${Math.round(f.kwh)}</b> kWh (من ${Math.round(f.lo)} لـ ${Math.round(f.hi)}) · فاتورة ≈ <b>${egpRange(f.costLo,f.costHi)}</b><div class="mut">بيفترض إن باقي الدورة (${f.daysLeft} يوم) زي المعتاد. متوسطك ${f.dailyAvg} kWh/يوم. النطاق تقريبي (±انحراف واحد) ومش بياخد في اعتباره تغيّر الجو.</div></div>`;
+  h+=`<div class="advice ${d.anomaly.level==='high'?'bad':''}">${d.anomaly.level==='high'?'⚠️':'✅'} ${d.anomaly.text}</div>`;
+  const hr=d.hourly||[], mx=Math.max(...hr,0.001), top=hr.map((v,i)=>[i,v]).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]+':00').join('، ');
+  h+=`<div style="margin-top:10px"><div class="mut">متوسط استهلاكك لكل ساعة من اليوم (kWh) · أعلى 3 ساعات: <b style="color:var(--tx)">${top}</b></div><div style="display:flex;gap:2px;align-items:flex-end;height:64px;margin-top:6px">${hr.map(v=>`<i title="${v}" style="flex:1;background:var(--acc);border-radius:3px 3px 0 0;height:${Math.max(3,v/mx*100)}%"></i>`).join('')}</div><div class="mut" style="display:flex;justify-content:space-between"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div></div>`;
+  el.innerHTML=h;
+}
+
+// ---------- المساعد المجاني (قواعد على بياناتك، من غير مفتاح ولا سيرفر) ----------
+function localAnswer(q){
+  if(typeof lastState==='undefined'||!lastState) return 'لسه ما وصلنيش قراءة من الجهاز. اتأكد إنه شغال ومتصل.';
+  const s=lastState, f=forecast(s), T=cfg.tiers, P=cfg.prices, used=s.kwh, cap=s.cap, proj=f.proj;
+  const norm=x=>x.replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا');   // يشيل التشكيل ويوحّد الهمزات
+  const nq=norm(q), has=(...w)=>w.some(x=>nq.includes(norm(x)));
+  const nm=id=>{const d=DEVS.find(z=>z.id===id); return d?d.name:'جهاز 24 ساعة';};
+  if(has('فاتور','فلوس','تكلف','هدفع','جنيه')){
+    let a='فاتورتك لحد دلوقتي ≈ '+egp(billCost(used,T,P))+' ('+used.toFixed(1)+' كيلووات).';
+    a+= proj==null ? ' لسه مفيش قياس كفاية للتوقع.' : ' والمتوقع آخر الدورة ≈ '+egp(billCost(proj,T,P))+' (من '+egpRange(billCost(f.projLo,T,P),billCost(f.projHi,T,P)).replace(' – ',' لـ ')+')، يعني حوالي '+Math.round(proj)+' كيلووات.';
+    return a+'\nده تقدير بدون رسوم الخدمة، وبيفترض إن معدلك ثابت.';
+  }
+  if(has('شريح','الحد','هعد','اعد','أعد')){
+    const tr=tierOf(used,T), left=tr.end===Infinity?null:tr.end-used;
+    let a='إنت في الشريحة '+tr.n+(left!=null?'، وفاضل '+left.toFixed(1)+' كيلووات على اللي بعدها (سعر الكيلووات الجاي '+unitPrice(used,T,P).toFixed(2)+' جنيه).':' (الأخيرة).');
+    a+=' الحد اللي ضابطه '+cap+' كيلووات وفاضل '+Math.max(0,cap-used).toFixed(1)+'.';
+    if(proj!=null) a+= proj>cap ? ' بمعدلك الحالي هتوصل '+Math.round(proj)+' آخر الدورة، يعني هتعدّي الحد'+(f.capDate?' حوالي '+f.capDate.toLocaleDateString('ar-EG',{day:'numeric',month:'long'}):'')+'.'
+      : ' بمعدلك الحالي هتوصل '+Math.round(proj)+' آخر الدورة، يعني تحت الحد'+(f.projHi>cap?' (بس في أسوأ تقدير '+Math.round(f.projHi)+' ممكن تعدّيه)':'')+'.';
+    return a;
+  }
+  if(has('وفر','توفير','أوفر','اوفر','ترشيد','قلل')){
+    const out=[];
+    s.dev.forEach(x=>{ const d=DEVS.find(z=>z.id===x.id); if(!d||!cfg.devs[d.id].on) return; const k=KIND[d.id]; if(!['ac','heater','washer'].includes(k)) return;
+      const Pp=devParams(d), dr=(s.msec||0)>=180?(x.kwh||0)/(s.msec/3600)*24:null, pl=savingsPlan(k,Pp,dr,f.left,f.proj,cap,T); if(pl) out.push({d,pl}); });
+    if(!out.length) return 'مفيش اقتراحات توفير دلوقتي: الأجهزة لسه ما اشتغلتش أو إعداداتها أصلًا موفّرة.';
+    return out.map(o=>'• '+o.d.name+': '+(o.pl.dir==='up'?'ارفع الحرارة المظبوطة':'اخفض الحرارة')+' لـ '+o.pl.newSet+'°م = توفير ≈ '+o.pl.pct+'%'+(o.pl.saveCycle!=null?' (حوالي '+o.pl.saveCycle.toFixed(1)+' كيلووات لآخر الدورة)':'')).join('\n')+'\nدي تقديرات من النموذج الحراري.';
+  }
+  if(has('دلوقتي','الآن','حالي','شغال')){
+    const on=s.dev.filter(x=>x.on).map(x=>nm(x.id)+' ('+x.w+' واط)');
+    return 'السحب الحالي '+s.p+' واط'+(on.length?'. الأجهزة اللي متعرّف عليها شغالة: '+on.join('، ')+'.':'. مفيش جهاز كبير متعرّف عليه دلوقتي.');
+  }
+  if(has('أكتر','اكتر','مين','بيستهلك','جهاز','عالي','زاد','غريب','ليه')){
+    const rows=s.dev.map(x=>({n:nm(x.id),k:x.kwh||0})); rows.push({n:'باقي البيت (راوتر، إضاءة...)',k:(s.bkwh||0)+(s.okwh||0)});
+    const tot=rows.reduce((a,r)=>a+r.k,0); if(tot<=0) return 'لسه مفيش قياس كفاية لتوزيع الاستهلاك.';
+    return 'أعلى المستهلكين (من آخر ضبط):\n'+rows.filter(r=>r.k>0).sort((a,b)=>b.k-a.k).slice(0,4).map(r=>'• '+r.n+': '+r.k.toFixed(2)+' كيلووات ('+Math.round(r.k/tot*100)+'%) ≈ '+egp(r.k*unitPrice(used,T,P))).join('\n');
+  }
+  return 'أقدر أجاوب عن: الفاتورة، والشريحة والحد، ومين بيستهلك أكتر، والتوفير، والسحب دلوقتي. جرّب واحد من الأزرار اللي فوق.';
+}
+
+// ---------- المساعد الذكي ----------
+let chat=[], chatBusy=false;
+function chatAdd(role,text){
+  chat.push({role,content:text});
+  const d=document.createElement('div'); d.className='advice'+(role==='user'?'':' ok');
+  d.style.cssText='white-space:pre-wrap;'+(role==='user'?'align-self:flex-start;background:var(--card);border:1px solid var(--line)':'');
+  d.textContent=(role==='user'?'🧑 ':'🤖 ')+text; $a('#chatLog').appendChild(d); d.scrollIntoView({block:'nearest'}); return d;
+}
+async function askAI(q){
+  if(chatBusy) return;
+  q=(q||$a('#chatIn').value).trim(); if(!q) return;
+  const url=(typeof cfg!=='undefined'&&cfg.brainUrl)||'';
+  if(!(url&&sb&&currentUser)){ $a('#chatIn').value=''; chatAdd('user',q); chatAdd('assistant',localAnswer(q)); return; }   // المجاني: قواعد على بياناتك
+  chatBusy=true; $a('#chatBtn').disabled=true; $a('#chatIn').value='';
+  const hist=chat.slice(-6); chatAdd('user',q);
+  const wait=document.createElement('div'); wait.className='mut'; wait.textContent='⏳ بيفكّر…'; $a('#chatLog').appendChild(wait);
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    const r=await fetch(url+'/ask',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+(session?session.access_token:'')},body:JSON.stringify({q,history:hist})});
+    const j=await r.json().catch(()=>({}));
+    wait.remove();
+    if(!r.ok){ chat.pop(); const e=document.createElement('div'); e.className='advice bad'; e.textContent='⚠️ '+(j.error||('خطأ '+r.status)); $a('#chatLog').appendChild(e); }
+    else chatAdd('assistant',j.answer||'(مفيش رد)');
+  }catch(e){ wait.remove(); chat.pop(); const x=document.createElement('div'); x.className='advice bad'; x.textContent='⚠️ ماقدرتش أوصل لخدمة المساعد. اتأكد من الرابط ومن إن الخدمة شغالة.'; $a('#chatLog').appendChild(x); }
+  chatBusy=false; $a('#chatBtn').disabled=false;
+}
+
 // ---------- السجل ----------
 function trackReading(){}   // التسجيل بقى على السيرفر (Recorder) مش من المتصفح
 let histTimer=null;
 async function loadHistory(){
   const card=$a('#histCard');
   if(!sb||!currentUser){ card.hidden=true; return; }
-  card.hidden=false;
+  card.hidden=false; loadInsights(); $a('#chatCard').hidden=false;
   if(!histTimer) histTimer=setInterval(loadHistory,300000);
   const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'Africa/Cairo';
   const [h,l]=await Promise.all([
